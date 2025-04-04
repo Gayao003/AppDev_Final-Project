@@ -106,8 +106,12 @@ public class LoginActivity extends AppCompatActivity {
         });
 
         tvForgotPassword.setOnClickListener(v -> {
-            // Handle forgot password
-            Toast.makeText(LoginActivity.this, "Forgot password clicked", Toast.LENGTH_SHORT).show();
+            Intent intent = new Intent(LoginActivity.this, ForgotPasswordActivity.class);
+            // Pass the email if it's already entered
+            if (!etEmail.getText().toString().trim().isEmpty()) {
+                intent.putExtra("email", etEmail.getText().toString().trim());
+            }
+            startActivity(intent);
         });
 
         btnBack.setOnClickListener(v -> {
