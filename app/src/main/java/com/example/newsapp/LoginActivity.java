@@ -28,6 +28,7 @@ import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.auth.GoogleAuthProvider;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.auth.FirebaseAuthInvalidCredentialsException;
+import com.example.newsapp.ui.common.NavbarActivity;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -90,8 +91,7 @@ public class LoginActivity extends AppCompatActivity {
         // Check if user is signed in
         FirebaseUser currentUser = mAuth.getCurrentUser();
         if (currentUser != null) {
-            // User is already signed in, go to MainActivity
-            startActivity(new Intent(LoginActivity.this, MainActivity.class));
+            startActivity(new Intent(LoginActivity.this, NavbarActivity.class));
             finish();
         }
     }
@@ -113,24 +113,8 @@ public class LoginActivity extends AppCompatActivity {
             return;
         }
 
-        // First check if the email exists in Firebase Auth
-        mAuth.fetchSignInMethodsForEmail(email)
-            .addOnCompleteListener(task -> {
-                if (task.isSuccessful()) {
-                    if (task.getResult().getSignInMethods().isEmpty()) {
-                        // Email doesn't exist in Firebase Auth
-                        showNoAccountDialog(email);
-                    } else {
-                        // Email exists, proceed with sign in
-                        proceedWithSignIn(email, password);
-                    }
-                } else {
-                    Log.w(TAG, "Error checking email existence", task.getException());
-                    Toast.makeText(LoginActivity.this, 
-                        "Error checking email: " + task.getException().getMessage(),
-                        Toast.LENGTH_SHORT).show();
-                }
-            });
+        // Directly proceed with sign-in attempt
+        proceedWithSignIn(email, password);
     }
     
     private void showNoAccountDialog(String email) {
@@ -149,24 +133,78 @@ public class LoginActivity extends AppCompatActivity {
     }
     
     private void proceedWithSignIn(String email, String password) {
+        // First try to sign in with email/password
         mAuth.signInWithEmailAndPassword(email, password)
             .addOnCompleteListener(this, task -> {
                 if (task.isSuccessful()) {
                     FirebaseUser user = mAuth.getCurrentUser();
                     if (user.isEmailVerified()) {
-                        // Update emailVerified status in Firestore
                         updateEmailVerificationStatus(user);
-                        // Proceed with login
                         startActivity(new Intent(LoginActivity.this, MainActivity.class));
                         finish();
                     } else {
-                        // Show verification required dialog
                         showVerificationDialog(user);
-                        // Sign out the unverified user
                         mAuth.signOut();
                     }
                 } else {
-                    // Handle specific authentication errors
+                    // If email/password sign-in fails, check if this email uses Google Sign-In
+                    mAuth.fetchSignInMethodsForEmail(email)
+                        .addOnCompleteListener(methodsTask -> {
+                            if (methodsTask.isSuccessful() && methodsTask.getResult() != null) {
+                                boolean hasGoogleProvider = false;
+                                for (String provider : methodsTask.getResult().getSignInMethods()) {
+                                    if (provider.equals(GoogleAuthProvider.PROVIDER_ID)) {
+                                        hasGoogleProvider = true;
+                                        break;
+                                    }
+                                }
+                                
+                                if (hasGoogleProvider) {
+                                    showGoogleSignInPrompt(email);
+                                } else {
+                                    // If no Google provider and password sign-in failed, show error
+                                    String errorMessage = "Invalid email or password";
+                                    if (task.getException() instanceof FirebaseAuthInvalidCredentialsException) {
+                                        errorMessage = "Invalid password. Please try again.";
+                                    }
+                                    Toast.makeText(LoginActivity.this, errorMessage, Toast.LENGTH_SHORT).show();
+                                }
+                            } else {
+                                // Handle error checking sign-in methods
+                                Toast.makeText(LoginActivity.this, 
+                                    "Authentication failed. Please try again.", 
+                                    Toast.LENGTH_SHORT).show();
+                            }
+                        });
+                }
+            });
+    }
+    
+    private void showGoogleSignInPrompt(String email) {
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setTitle("Google Sign-In Required");
+        builder.setMessage("This account is linked to Google. Please sign in with Google instead.");
+        builder.setPositiveButton("Sign in with Google", (dialog, which) -> {
+            signInWithGoogle();
+        });
+        builder.setNegativeButton("Cancel", null);
+        builder.show();
+    }
+    
+    private void performEmailPasswordSignIn(String email, String password) {
+        mAuth.signInWithEmailAndPassword(email, password)
+            .addOnCompleteListener(this, task -> {
+                if (task.isSuccessful()) {
+                    FirebaseUser user = mAuth.getCurrentUser();
+                    if (user.isEmailVerified()) {
+                        updateEmailVerificationStatus(user);
+                        startActivity(new Intent(LoginActivity.this, MainActivity.class));
+                        finish();
+                    } else {
+                        showVerificationDialog(user);
+                        mAuth.signOut();
+                    }
+                } else {
                     String errorMessage = "Authentication failed";
                     if (task.getException() != null) {
                         if (task.getException() instanceof FirebaseAuthInvalidCredentialsException) {
