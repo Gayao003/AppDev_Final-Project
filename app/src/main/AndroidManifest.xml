@@ -32,15 +32,6 @@
         <activity
             android:name=".ForgotPasswordActivity"
             android:exported="false" />
-        <activity
-            android:name=".VerifyOtpActivity"
-            android:exported="false" />
-        <activity
-            android:name=".ResetPasswordActivity"
-            android:exported="false" />
-        <activity
-            android:name=".RegisterStep2Activity"
-            android:exported="false" />
     </application>
 
 </manifest>

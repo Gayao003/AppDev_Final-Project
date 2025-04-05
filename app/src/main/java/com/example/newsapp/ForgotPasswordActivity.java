@@ -1,7 +1,6 @@
 // app/src/main/java/com/example/newsapp/ForgotPasswordActivity.java
 package com.example.newsapp;
 
-import android.content.Intent;
 import android.os.Bundle;
 import android.widget.Button;
 import android.widget.EditText;
@@ -9,6 +8,7 @@ import android.widget.ImageButton;
 import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.app.AlertDialog;
 
 import com.google.firebase.auth.FirebaseAuth;
 
@@ -56,16 +56,30 @@ public class ForgotPasswordActivity extends AppCompatActivity {
         btnResetPassword.setEnabled(false);
         btnResetPassword.setText("Sending...");
 
-        // In a real app, you would verify the email exists in Firebase
-        // For this example, we'll just proceed to the OTP verification screen
-        
-        // Navigate to OTP verification screen
-        Intent intent = new Intent(ForgotPasswordActivity.this, VerifyOtpActivity.class);
-        intent.putExtra("email", email);
-        startActivity(intent);
-        
-        // Re-enable button
-        btnResetPassword.setEnabled(true);
-        btnResetPassword.setText("Send Reset Link");
+        // Use Firebase's built-in password reset functionality
+        mAuth.sendPasswordResetEmail(email)
+            .addOnCompleteListener(task -> {
+                btnResetPassword.setEnabled(true);
+                btnResetPassword.setText("Send Reset Link");
+                
+                if (task.isSuccessful()) {
+                    // Show success dialog
+                    AlertDialog.Builder builder = new AlertDialog.Builder(this);
+                    builder.setTitle("Check Your Email");
+                    builder.setMessage("We've sent a password reset link to " + email + 
+                        ". Please check your inbox and follow the instructions to reset your password.");
+                    builder.setPositiveButton("OK", (dialog, which) -> {
+                        // Return to login screen
+                        finish();
+                    });
+                    builder.setCancelable(false);
+                    builder.show();
+                } else {
+                    // Show error
+                    Toast.makeText(ForgotPasswordActivity.this, 
+                        "Failed to send reset email: " + task.getException().getMessage(),
+                        Toast.LENGTH_LONG).show();
+                }
+            });
     }
 }

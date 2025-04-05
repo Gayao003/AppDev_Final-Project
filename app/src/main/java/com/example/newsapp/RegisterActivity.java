@@ -1,6 +1,7 @@
 package com.example.newsapp;
 
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.text.InputType;
 import android.util.Log;
@@ -12,9 +13,15 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.app.AlertDialog;
 
 import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.firestore.FirebaseFirestore;
+import com.google.firebase.auth.UserProfileChangeRequest;
+
+import java.util.HashMap;
+import java.util.Map;
 
 public class RegisterActivity extends AppCompatActivity {
     private static final String TAG = "RegisterActivity";
@@ -54,7 +61,7 @@ public class RegisterActivity extends AppCompatActivity {
         btnTogglePassword = findViewById(R.id.btnTogglePassword);
         btnToggleConfirmPassword = findViewById(R.id.btnToggleConfirmPassword);
         
-        tvStepIndicator.setText("Step 1 of 2");
+        tvStepIndicator.setText("Register");
         
         // Set click listeners
         btnNext.setOnClickListener(v -> validateAndProceed());
@@ -160,9 +167,6 @@ public class RegisterActivity extends AppCompatActivity {
     }
     
     private void proceedToStep2(String name, String email, String phone, String age, String password) {
-        // Send OTP to email
-        sendOtpToEmail(email);
-        
         // Store user data in SharedPreferences
         getSharedPreferences("NewsAppPrefs", MODE_PRIVATE)
                 .edit()
@@ -173,27 +177,104 @@ public class RegisterActivity extends AppCompatActivity {
                 .putString("registration_password", password)
                 .apply();
         
-        // Navigate to step 2
-        Intent intent = new Intent(RegisterActivity.this, RegisterStep2Activity.class);
-        intent.putExtra("email", email);
-        startActivity(intent);
+        // Send verification email and create account
+        sendOtpToEmail(email);
     }
     
     private void sendOtpToEmail(String email) {
-        // Generate a random 6-digit OTP
-        int otp = (int) (Math.random() * 900000) + 100000;
+        // We'll create the user account first, then send verification email
+        String password = getSharedPreferences("NewsAppPrefs", MODE_PRIVATE)
+                .getString("registration_password", "");
         
-        // Store OTP in SharedPreferences or Firebase for verification
-        getSharedPreferences("NewsAppPrefs", MODE_PRIVATE)
-                .edit()
-                .putString("registration_otp", String.valueOf(otp))
-                .putString("registration_email", email)
-                .apply();
+        // Show loading indicator
+        btnNext.setEnabled(false);
+        btnNext.setText("Creating Account...");
         
-        // In a real app, you would send this OTP via email
-        // For now, we'll just log it and show a toast for testing
-        Log.d(TAG, "OTP for registration: " + otp);
-        Toast.makeText(this, "OTP sent to email: " + otp, Toast.LENGTH_LONG).show();
+        // Create user with email and password
+        mAuth.createUserWithEmailAndPassword(email, password)
+                .addOnCompleteListener(this, task -> {
+                    btnNext.setEnabled(true);
+                    btnNext.setText("Register");
+                    
+                    if (task.isSuccessful()) {
+                        // Sign in success, update UI with the signed-in user's information
+                        Log.d(TAG, "createUserWithEmail:success");
+                        FirebaseUser user = mAuth.getCurrentUser();
+                        
+                        // Send verification email
+                        sendEmailVerification(user);
+                        
+                        // Save additional user data to Firestore
+                        saveUserToFirestore(user);
+                    } else {
+                        // If sign in fails, display a message to the user
+                        Log.w(TAG, "createUserWithEmail:failure", task.getException());
+                        Toast.makeText(RegisterActivity.this, "Registration failed: " + 
+                                task.getException().getMessage(), Toast.LENGTH_SHORT).show();
+                    }
+                });
+    }
+    
+    private void sendEmailVerification(FirebaseUser user) {
+        user.sendEmailVerification()
+            .addOnCompleteListener(task -> {
+                if (task.isSuccessful()) {
+                    // Show verification instructions dialog
+                    androidx.appcompat.app.AlertDialog.Builder builder = 
+                        new androidx.appcompat.app.AlertDialog.Builder(this);
+                    builder.setTitle("Verify Your Email");
+                    builder.setMessage("A verification email has been sent to " + user.getEmail() + 
+                        ". Please check your inbox and click the verification link to complete registration.");
+                    builder.setPositiveButton("OK", (dialog, which) -> {
+                        // Sign out the user and redirect to login
+                        mAuth.signOut();
+                        Intent intent = new Intent(RegisterActivity.this, LoginActivity.class);
+                        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+                        startActivity(intent);
+                        finish();
+                    });
+                    builder.setCancelable(false);
+                    builder.show();
+                } else {
+                    Log.e(TAG, "sendEmailVerification failed", task.getException());
+                    Toast.makeText(RegisterActivity.this,
+                        "Failed to send verification email: " + task.getException().getMessage(),
+                        Toast.LENGTH_LONG).show();
+                }
+            });
+    }
+    
+    private void saveUserToFirestore(FirebaseUser user) {
+        // Get user data from SharedPreferences
+        SharedPreferences prefs = getSharedPreferences("NewsAppPrefs", MODE_PRIVATE);
+        String name = prefs.getString("registration_name", "");
+        String email = prefs.getString("registration_email", "");
+        String phone = prefs.getString("registration_phone", "");
+        String age = prefs.getString("registration_age", "");
+        
+        // Create user data map
+        Map<String, Object> userData = new HashMap<>();
+        userData.put("name", name);
+        userData.put("email", email);
+        userData.put("phone", phone);
+        userData.put("age", age);
+        userData.put("createdAt", System.currentTimeMillis());
+        userData.put("lastLogin", System.currentTimeMillis());
+        userData.put("provider", "email");
+        userData.put("emailVerified", false);
+        
+        // Save to Firestore
+        db.collection("users").document(user.getUid())
+            .set(userData)
+            .addOnSuccessListener(aVoid -> {
+                Log.d(TAG, "User data saved to Firestore");
+            })
+            .addOnFailureListener(e -> {
+                Log.e(TAG, "Error saving user data", e);
+                Toast.makeText(RegisterActivity.this, 
+                    "Failed to save user data: " + e.getMessage(),
+                    Toast.LENGTH_SHORT).show();
+            });
     }
     
     private void togglePasswordVisibility(EditText editText, ImageButton toggleButton) {
