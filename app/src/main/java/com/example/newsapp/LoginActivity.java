@@ -13,6 +13,7 @@ import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 
 import com.google.android.gms.auth.api.signin.GoogleSignIn;
@@ -26,6 +27,7 @@ import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.auth.GoogleAuthProvider;
 import com.google.firebase.firestore.FirebaseFirestore;
+import com.google.firebase.auth.FirebaseAuthInvalidCredentialsException;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -110,23 +112,108 @@ public class LoginActivity extends AppCompatActivity {
             etPassword.requestFocus();
             return;
         }
-        
-        // Sign in with email and password
+
+        // First check if the email exists in Firebase Auth
+        mAuth.fetchSignInMethodsForEmail(email)
+            .addOnCompleteListener(task -> {
+                if (task.isSuccessful()) {
+                    if (task.getResult().getSignInMethods().isEmpty()) {
+                        // Email doesn't exist in Firebase Auth
+                        showNoAccountDialog(email);
+                    } else {
+                        // Email exists, proceed with sign in
+                        proceedWithSignIn(email, password);
+                    }
+                } else {
+                    Log.w(TAG, "Error checking email existence", task.getException());
+                    Toast.makeText(LoginActivity.this, 
+                        "Error checking email: " + task.getException().getMessage(),
+                        Toast.LENGTH_SHORT).show();
+                }
+            });
+    }
+    
+    private void showNoAccountDialog(String email) {
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setTitle("Account Not Found");
+        builder.setMessage("No account exists with email: " + email + 
+            "\nWould you like to create a new account?");
+        builder.setPositiveButton("Register", (dialog, which) -> {
+            // Navigate to registration
+            Intent intent = new Intent(LoginActivity.this, RegisterActivity.class);
+            intent.putExtra("email", email); // Pre-fill email in registration
+            startActivity(intent);
+        });
+        builder.setNegativeButton("Cancel", null);
+        builder.show();
+    }
+    
+    private void proceedWithSignIn(String email, String password) {
         mAuth.signInWithEmailAndPassword(email, password)
-                .addOnCompleteListener(this, task -> {
-                    if (task.isSuccessful()) {
-                        // Sign in success
-                        Log.d(TAG, "signInWithEmail:success");
-                        FirebaseUser user = mAuth.getCurrentUser();
+            .addOnCompleteListener(this, task -> {
+                if (task.isSuccessful()) {
+                    FirebaseUser user = mAuth.getCurrentUser();
+                    if (user.isEmailVerified()) {
+                        // Update emailVerified status in Firestore
+                        updateEmailVerificationStatus(user);
+                        // Proceed with login
                         startActivity(new Intent(LoginActivity.this, MainActivity.class));
                         finish();
                     } else {
-                        // If sign in fails, display a message to the user
-                        Log.w(TAG, "signInWithEmail:failure", task.getException());
-                        Toast.makeText(LoginActivity.this, "Authentication failed: " + task.getException().getMessage(),
-                                Toast.LENGTH_SHORT).show();
+                        // Show verification required dialog
+                        showVerificationDialog(user);
+                        // Sign out the unverified user
+                        mAuth.signOut();
                     }
-                });
+                } else {
+                    // Handle specific authentication errors
+                    String errorMessage = "Authentication failed";
+                    if (task.getException() != null) {
+                        if (task.getException() instanceof FirebaseAuthInvalidCredentialsException) {
+                            errorMessage = "Invalid password. Please try again.";
+                        } else {
+                            errorMessage = task.getException().getMessage();
+                        }
+                    }
+                    Toast.makeText(LoginActivity.this, errorMessage, Toast.LENGTH_SHORT).show();
+                }
+            });
+    }
+    
+    private void showVerificationDialog(FirebaseUser user) {
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setTitle("Email Verification Required");
+        builder.setMessage("Please verify your email address first. Check your inbox for the verification link.");
+        builder.setPositiveButton("Resend Email", (dialog, which) -> {
+            sendVerificationEmail(user);
+        });
+        builder.setNegativeButton("OK", null);
+        builder.show();
+    }
+    
+    private void sendVerificationEmail(FirebaseUser user) {
+        user.sendEmailVerification()
+            .addOnCompleteListener(task -> {
+                if (task.isSuccessful()) {
+                    Toast.makeText(LoginActivity.this,
+                        "Verification email sent to " + user.getEmail(),
+                        Toast.LENGTH_LONG).show();
+                } else {
+                    Toast.makeText(LoginActivity.this,
+                        "Failed to send verification email: " + task.getException().getMessage(),
+                        Toast.LENGTH_LONG).show();
+                }
+            });
+    }
+    
+    private void updateEmailVerificationStatus(FirebaseUser user) {
+        Map<String, Object> updates = new HashMap<>();
+        updates.put("emailVerified", true);
+        
+        db.collection("users").document(user.getUid())
+            .update(updates)
+            .addOnSuccessListener(aVoid -> Log.d(TAG, "Email verification status updated"))
+            .addOnFailureListener(e -> Log.w(TAG, "Error updating email verification status", e));
     }
     
     private void signInWithGoogle() {
@@ -188,6 +275,7 @@ public class LoginActivity extends AppCompatActivity {
         userData.put("createdAt", System.currentTimeMillis());
         userData.put("lastLogin", System.currentTimeMillis());
         userData.put("provider", "google");
+        userData.put("emailVerified", true);
         
         db.collection("users").document(user.getUid())
                 .set(userData)

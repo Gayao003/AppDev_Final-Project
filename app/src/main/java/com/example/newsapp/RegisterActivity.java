@@ -63,6 +63,12 @@ public class RegisterActivity extends AppCompatActivity {
         
         tvStepIndicator.setText("Register");
         
+        // Check if email was passed from login screen
+        String prefillEmail = getIntent().getStringExtra("email");
+        if (prefillEmail != null && !prefillEmail.isEmpty()) {
+            etEmail.setText(prefillEmail);
+        }
+        
         // Set click listeners
         btnNext.setOnClickListener(v -> validateAndProceed());
         
@@ -261,7 +267,7 @@ public class RegisterActivity extends AppCompatActivity {
         userData.put("createdAt", System.currentTimeMillis());
         userData.put("lastLogin", System.currentTimeMillis());
         userData.put("provider", "email");
-        userData.put("emailVerified", false);
+        userData.put("emailVerified", user.isEmailVerified());
         
         // Save to Firestore
         db.collection("users").document(user.getUid())
