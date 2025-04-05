@@ -47,15 +47,30 @@ public class LoginActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_login);
-        
-        // Initialize Firebase Auth
-        mAuth = FirebaseAuth.getInstance();
-        
-        // Initialize Firestore
-        db = FirebaseFirestore.getInstance();
-        
-        // Initialize views
+        try {
+            setContentView(R.layout.activity_login);
+            
+            // Initialize Firebase Auth
+            mAuth = FirebaseAuth.getInstance();
+            
+            // Initialize Firestore
+            db = FirebaseFirestore.getInstance();
+            
+            // Initialize views
+            initializeViews();
+            
+            // Configure Google Sign In
+            configureGoogleSignIn();
+            
+            // Set click listeners
+            setClickListeners();
+        } catch (Exception e) {
+            Log.e(TAG, "Error in onCreate: ", e);
+            Toast.makeText(this, "Error initializing app: " + e.getMessage(), Toast.LENGTH_LONG).show();
+        }
+    }
+    
+    private void initializeViews() {
         etEmail = findViewById(R.id.etLoginEmail);
         etPassword = findViewById(R.id.etLoginPassword);
         btnLogin = findViewById(R.id.btnLogin);
@@ -65,79 +80,6 @@ public class LoginActivity extends AppCompatActivity {
         btnBack = findViewById(R.id.btnBack);
         btnTogglePassword = findViewById(R.id.btnTogglePassword);
         tvSignUp = findViewById(R.id.tvSignUp);
-        
-        // Configure Google Sign In
-        GoogleSignInOptions gso = new GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-                .requestIdToken(getString(R.string.default_web_client_id))
-                .requestEmail()
-                .build();
-        
-        mGoogleSignInClient = GoogleSignIn.getClient(this, gso);
-        
-        // Set up ActivityResultLauncher for Google Sign-In
-        signInLauncher = registerForActivityResult(
-                new ActivityResultContracts.StartActivityForResult(),
-                result -> {
-                    if (result.getResultCode() == RESULT_OK) {
-                        Intent data = result.getData();
-                        Task<GoogleSignInAccount> task = GoogleSignIn.getSignedInAccountFromIntent(data);
-                        try {
-                            // Google Sign In was successful, authenticate with Firebase
-                            GoogleSignInAccount account = task.getResult(ApiException.class);
-                            Log.d(TAG, "firebaseAuthWithGoogle:" + account.getId());
-                            firebaseAuthWithGoogle(account.getIdToken());
-                        } catch (ApiException e) {
-                            // Google Sign In failed
-                            Log.w(TAG, "Google sign in failed", e);
-                            Toast.makeText(LoginActivity.this, "Google Sign-In failed: " + e.getMessage(),
-                                    Toast.LENGTH_SHORT).show();
-                        }
-                    }
-                });
-        
-        // Set click listeners
-        btnLogin.setOnClickListener(v -> loginUser());
-        
-        btnGoogleSignIn.setOnClickListener(v -> signInWithGoogle());
-        
-        tvRegisterPrompt.setOnClickListener(v -> {
-            Intent intent = new Intent(LoginActivity.this, RegisterActivity.class);
-            startActivity(intent);
-        });
-
-        tvForgotPassword.setOnClickListener(v -> {
-            Intent intent = new Intent(LoginActivity.this, ForgotPasswordActivity.class);
-            // Pass the email if it's already entered
-            if (!etEmail.getText().toString().trim().isEmpty()) {
-                intent.putExtra("email", etEmail.getText().toString().trim());
-            }
-            startActivity(intent);
-        });
-
-        btnBack.setOnClickListener(v -> {
-            // Handle back button - usually just finish()
-            finish();
-        });
-
-        btnTogglePassword.setOnClickListener(v -> {
-            // Toggle password visibility
-            if (etPassword.getInputType() == (InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD)) {
-                // Show password
-                etPassword.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD);
-                btnTogglePassword.setImageResource(R.drawable.ic_visibility);
-            } else {
-                // Hide password
-                etPassword.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
-                btnTogglePassword.setImageResource(R.drawable.ic_visibility_off);
-            }
-            // Move cursor to end of text
-            etPassword.setSelection(etPassword.getText().length());
-        });
-
-        tvSignUp.setOnClickListener(v -> {
-            Intent intent = new Intent(LoginActivity.this, RegisterActivity.class);
-            startActivity(intent);
-        });
     }
     
     @Override
@@ -188,14 +130,29 @@ public class LoginActivity extends AppCompatActivity {
     }
     
     private void signInWithGoogle() {
-        Intent signInIntent = mGoogleSignInClient.getSignInIntent();
-        signInLauncher.launch(signInIntent);
+        // Show loading indicator
+        // progressBar.setVisibility(View.VISIBLE);
+        
+        // Sign out from Google first to force the account picker to show
+        mGoogleSignInClient.signOut().addOnCompleteListener(this, task -> {
+            // Hide loading indicator
+            // progressBar.setVisibility(View.GONE);
+            
+            // Now start the sign-in flow
+            Intent signInIntent = mGoogleSignInClient.getSignInIntent();
+            signInLauncher.launch(signInIntent);
+        });
     }
     
     private void firebaseAuthWithGoogle(String idToken) {
+        // Show a loading indicator
+        // You could add a ProgressBar in your layout and show it here
+        
         AuthCredential credential = GoogleAuthProvider.getCredential(idToken, null);
         mAuth.signInWithCredential(credential)
                 .addOnCompleteListener(this, task -> {
+                    // Hide loading indicator
+                    
                     if (task.isSuccessful()) {
                         // Sign in success
                         Log.d(TAG, "signInWithCredential:success");
@@ -204,8 +161,11 @@ public class LoginActivity extends AppCompatActivity {
                         // Check if this is a new user
                         boolean isNewUser = task.getResult().getAdditionalUserInfo().isNewUser();
                         if (isNewUser) {
-                            // Save user data to Firestore
+                            // Save user data to Firestore for new users
                             saveUserToFirestore(user);
+                        } else {
+                            // Update last login timestamp for existing users
+                            updateUserLastLogin(user.getUid());
                         }
                         
                         startActivity(new Intent(LoginActivity.this, MainActivity.class));
@@ -213,7 +173,8 @@ public class LoginActivity extends AppCompatActivity {
                     } else {
                         // If sign in fails, display a message to the user
                         Log.w(TAG, "signInWithCredential:failure", task.getException());
-                        Toast.makeText(LoginActivity.this, "Authentication failed: " + task.getException().getMessage(),
+                        Toast.makeText(LoginActivity.this, "Authentication failed: " + 
+                                (task.getException() != null ? task.getException().getMessage() : "Unknown error"),
                                 Toast.LENGTH_SHORT).show();
                     }
                 });
@@ -223,11 +184,133 @@ public class LoginActivity extends AppCompatActivity {
         Map<String, Object> userData = new HashMap<>();
         userData.put("email", user.getEmail());
         userData.put("displayName", user.getDisplayName());
+        userData.put("photoUrl", user.getPhotoUrl() != null ? user.getPhotoUrl().toString() : null);
         userData.put("createdAt", System.currentTimeMillis());
+        userData.put("lastLogin", System.currentTimeMillis());
+        userData.put("provider", "google");
         
         db.collection("users").document(user.getUid())
                 .set(userData)
-                .addOnSuccessListener(aVoid -> Log.d(TAG, "User data saved to Firestore"))
-                .addOnFailureListener(e -> Log.w(TAG, "Error saving user data", e));
+                .addOnSuccessListener(aVoid -> {
+                    Log.d(TAG, "User data saved to Firestore");
+                    Toast.makeText(LoginActivity.this, "Account data saved successfully", 
+                            Toast.LENGTH_SHORT).show();
+                })
+                .addOnFailureListener(e -> {
+                    Log.e(TAG, "Error saving user data", e);
+                    Toast.makeText(LoginActivity.this, 
+                            "Failed to save account data: " + e.getMessage(),
+                            Toast.LENGTH_SHORT).show();
+                });
+    }
+
+    private void updateUserLastLogin(String userId) {
+        Map<String, Object> updates = new HashMap<>();
+        updates.put("lastLogin", System.currentTimeMillis());
+        
+        db.collection("users").document(userId)
+                .update(updates)
+                .addOnSuccessListener(aVoid -> Log.d(TAG, "User last login updated"))
+                .addOnFailureListener(e -> Log.w(TAG, "Error updating last login", e));
+    }
+
+    private void saveUserPreferences(String userId) {
+        // Create default user preferences
+        Map<String, Object> preferences = new HashMap<>();
+        preferences.put("notificationsEnabled", true);
+        preferences.put("darkModeEnabled", false);
+        preferences.put("preferredCategories", new String[]{"general", "technology"});
+        
+        db.collection("users").document(userId)
+                .collection("preferences").document("settings")
+                .set(preferences)
+                .addOnSuccessListener(aVoid -> Log.d(TAG, "User preferences saved"))
+                .addOnFailureListener(e -> Log.w(TAG, "Error saving user preferences", e));
+    }
+
+    private void configureGoogleSignIn() {
+        try {
+            // Log the web client ID to debug
+            String webClientId = getString(R.string.default_web_client_id);
+            Log.d(TAG, "Web Client ID: " + (webClientId != null ? webClientId : "null"));
+            
+            // Configure Google Sign In
+            GoogleSignInOptions gso = new GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+                    .requestIdToken(webClientId)
+                    .requestEmail()
+                    .build();
+            
+            mGoogleSignInClient = GoogleSignIn.getClient(this, gso);
+            
+            // Set up ActivityResultLauncher for Google Sign-In
+            signInLauncher = registerForActivityResult(
+                    new ActivityResultContracts.StartActivityForResult(),
+                    result -> {
+                        if (result.getResultCode() == RESULT_OK) {
+                            Intent data = result.getData();
+                            Task<GoogleSignInAccount> task = GoogleSignIn.getSignedInAccountFromIntent(data);
+                            try {
+                                // Google Sign In was successful, authenticate with Firebase
+                                GoogleSignInAccount account = task.getResult(ApiException.class);
+                                Log.d(TAG, "firebaseAuthWithGoogle:" + account.getId());
+                                firebaseAuthWithGoogle(account.getIdToken());
+                            } catch (ApiException e) {
+                                // Google Sign In failed
+                                Log.w(TAG, "Google sign in failed", e);
+                                Toast.makeText(LoginActivity.this, "Google Sign-In failed: " + e.getMessage(),
+                                        Toast.LENGTH_SHORT).show();
+                            }
+                        }
+                    });
+        } catch (Exception e) {
+            Log.e(TAG, "Error configuring Google Sign-In: ", e);
+            Toast.makeText(this, "Error configuring Google Sign-In: " + e.getMessage(), Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void setClickListeners() {
+        // Set click listeners
+        btnLogin.setOnClickListener(v -> loginUser());
+        
+        btnGoogleSignIn.setOnClickListener(v -> signInWithGoogle());
+        
+        tvRegisterPrompt.setOnClickListener(v -> {
+            Intent intent = new Intent(LoginActivity.this, RegisterActivity.class);
+            startActivity(intent);
+        });
+
+        tvForgotPassword.setOnClickListener(v -> {
+            Intent intent = new Intent(LoginActivity.this, ForgotPasswordActivity.class);
+            // Pass the email if it's already entered
+            if (!etEmail.getText().toString().trim().isEmpty()) {
+                intent.putExtra("email", etEmail.getText().toString().trim());
+            }
+            startActivity(intent);
+        });
+
+        btnBack.setOnClickListener(v -> {
+            // Handle back button - usually just finish()
+            finish();
+        });
+
+        btnTogglePassword.setOnClickListener(v -> {
+            // Toggle password visibility
+            if (etPassword.getInputType() == (InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD)) {
+                // Show password
+                etPassword.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD);
+                btnTogglePassword.setImageResource(R.drawable.ic_visibility);
+            } else {
+                // Hide password
+                etPassword.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+                btnTogglePassword.setImageResource(R.drawable.ic_visibility_off);
+            }
+            // Move cursor to end of text
+            etPassword.setSelection(etPassword.getText().length());
+        });
+
+        tvSignUp.setOnClickListener(v -> {
+            Intent intent = new Intent(LoginActivity.this, RegisterActivity.class);
+            startActivity(intent);
+        });
     }
 }
