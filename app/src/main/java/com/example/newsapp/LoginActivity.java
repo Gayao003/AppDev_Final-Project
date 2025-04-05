@@ -133,14 +133,13 @@ public class LoginActivity extends AppCompatActivity {
     }
     
     private void proceedWithSignIn(String email, String password) {
-        // First try to sign in with email/password
         mAuth.signInWithEmailAndPassword(email, password)
             .addOnCompleteListener(this, task -> {
                 if (task.isSuccessful()) {
                     FirebaseUser user = mAuth.getCurrentUser();
                     if (user.isEmailVerified()) {
                         updateEmailVerificationStatus(user);
-                        startActivity(new Intent(LoginActivity.this, MainActivity.class));
+                        startActivity(new Intent(LoginActivity.this, NavbarActivity.class));
                         finish();
                     } else {
                         showVerificationDialog(user);
@@ -162,7 +161,6 @@ public class LoginActivity extends AppCompatActivity {
                                 if (hasGoogleProvider) {
                                     showGoogleSignInPrompt(email);
                                 } else {
-                                    // If no Google provider and password sign-in failed, show error
                                     String errorMessage = "Invalid email or password";
                                     if (task.getException() instanceof FirebaseAuthInvalidCredentialsException) {
                                         errorMessage = "Invalid password. Please try again.";
@@ -170,7 +168,6 @@ public class LoginActivity extends AppCompatActivity {
                                     Toast.makeText(LoginActivity.this, errorMessage, Toast.LENGTH_SHORT).show();
                                 }
                             } else {
-                                // Handle error checking sign-in methods
                                 Toast.makeText(LoginActivity.this, 
                                     "Authentication failed. Please try again.", 
                                     Toast.LENGTH_SHORT).show();
@@ -198,7 +195,7 @@ public class LoginActivity extends AppCompatActivity {
                     FirebaseUser user = mAuth.getCurrentUser();
                     if (user.isEmailVerified()) {
                         updateEmailVerificationStatus(user);
-                        startActivity(new Intent(LoginActivity.this, MainActivity.class));
+                        startActivity(new Intent(LoginActivity.this, NavbarActivity.class));
                         finish();
                     } else {
                         showVerificationDialog(user);
@@ -275,34 +272,31 @@ public class LoginActivity extends AppCompatActivity {
         
         AuthCredential credential = GoogleAuthProvider.getCredential(idToken, null);
         mAuth.signInWithCredential(credential)
-                .addOnCompleteListener(this, task -> {
-                    // Hide loading indicator
-                    
-                    if (task.isSuccessful()) {
-                        // Sign in success
-                        Log.d(TAG, "signInWithCredential:success");
-                        FirebaseUser user = mAuth.getCurrentUser();
-                        
-                        // Check if this is a new user
-                        boolean isNewUser = task.getResult().getAdditionalUserInfo().isNewUser();
-                        if (isNewUser) {
-                            // Save user data to Firestore for new users
-                            saveUserToFirestore(user);
-                        } else {
-                            // Update last login timestamp for existing users
-                            updateUserLastLogin(user.getUid());
-                        }
-                        
-                        startActivity(new Intent(LoginActivity.this, MainActivity.class));
-                        finish();
+            .addOnCompleteListener(this, task -> {
+                if (task.isSuccessful()) {
+                    FirebaseUser user = mAuth.getCurrentUser();
+                    // Proceed with user login
+                    Log.d(TAG, "signInWithCredential:success");
+                    // Check if this is a new user
+                    boolean isNewUser = task.getResult().getAdditionalUserInfo().isNewUser();
+                    if (isNewUser) {
+                        // Save user data to Firestore for new users
+                        saveUserToFirestore(user);
                     } else {
-                        // If sign in fails, display a message to the user
-                        Log.w(TAG, "signInWithCredential:failure", task.getException());
-                        Toast.makeText(LoginActivity.this, "Authentication failed: " + 
-                                (task.getException() != null ? task.getException().getMessage() : "Unknown error"),
-                                Toast.LENGTH_SHORT).show();
+                        // Update last login timestamp for existing users
+                        updateUserLastLogin(user.getUid());
                     }
-                });
+                    
+                    startActivity(new Intent(LoginActivity.this, NavbarActivity.class));
+                    finish();
+                } else {
+                    // Handle sign-in failure
+                    Log.w(TAG, "signInWithCredential:failure", task.getException());
+                    Toast.makeText(LoginActivity.this, "Authentication failed: " + 
+                            (task.getException() != null ? task.getException().getMessage() : "Unknown error"),
+                            Toast.LENGTH_SHORT).show();
+                }
+            });
     }
     
     private void saveUserToFirestore(FirebaseUser user) {

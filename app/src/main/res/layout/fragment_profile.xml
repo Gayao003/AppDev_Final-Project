@@ -75,6 +75,14 @@
                         android:layout_marginTop="4dp"
                         android:textColor="#757575" />
 
+                    <Button
+                        android:id="@+id/btnLinkAccount"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="24dp"
+                        android:text="Link Google Account"
+                        style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
+
                 </LinearLayout>
 
             </com.google.android.material.card.MaterialCardView>

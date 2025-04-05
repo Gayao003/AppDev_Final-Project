@@ -1,27 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <menu xmlns:android="http://schemas.android.com/apk/res/android">
     <item
+        android:id="@+id/navigation_profile"
+        android:title="Profile"
+        android:icon="@drawable/ic_person" />
+    <item
         android:id="@+id/navigation_home"
-        android:icon="@drawable/ic_home"
-        android:title="@string/nav_home" />
-
+        android:title="Home"
+        android:icon="@drawable/ic_home" />
     <item
         android:id="@+id/navigation_categories"
-        android:icon="@drawable/ic_category"
-        android:title="@string/nav_categories" />
-
+        android:title="Categories"
+        android:icon="@drawable/ic_category" />
     <item
         android:id="@+id/navigation_search"
-        android:icon="@drawable/ic_search"
-        android:title="@string/nav_search" />
-
+        android:title="Search"
+        android:icon="@drawable/ic_search" />
     <item
         android:id="@+id/navigation_bookmarks"
-        android:icon="@drawable/ic_bookmark"
-        android:title="@string/nav_bookmarks" />
-
-    <item
-        android:id="@+id/navigation_profile"
-        android:icon="@drawable/ic_person"
-        android:title="@string/nav_profile" />
+        android:title="Bookmarks"
+        android:icon="@drawable/ic_bookmark" />
 </menu>
