@@ -19,37 +19,38 @@ import com.bumptech.glide.request.RequestOptions;
 import com.example.newsapp.R;
 import com.example.newsapp.data.models.Article;
 import com.example.newsapp.ui.article.ArticleDetailFragment;
+import java.util.ArrayList;
 import java.util.List;
 
 public class NewsAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
     private static final String TAG = "NewsAdapter";
     private List<Article> articles;
-    private boolean isFeatured;
-
+    private final boolean isFeatured;
+    
+    private static final int VIEW_TYPE_FEATURED = 1;
+    private static final int VIEW_TYPE_REGULAR = 2;
+    
     public NewsAdapter(List<Article> articles, boolean isFeatured) {
-        this.articles = articles;
+        this.articles = new ArrayList<>(articles);
         this.isFeatured = isFeatured;
-        logArticles();
     }
-
+    
     public void updateArticles(List<Article> newArticles) {
-        this.articles = newArticles;
-        logArticles();
+        Log.d(TAG, "Updating " + (isFeatured ? "featured" : "regular") + " articles: " + 
+               newArticles.size() + " articles");
+        this.articles = new ArrayList<>(newArticles);
         notifyDataSetChanged();
     }
     
-    private void logArticles() {
-        Log.d(TAG, "Articles count: " + (articles != null ? articles.size() : 0));
-        if (articles != null && !articles.isEmpty()) {
-            for (int i = 0; i < Math.min(articles.size(), 2); i++) {
-                Article article = articles.get(i);
-                Log.d(TAG, "Article " + i + ": " + article.toString());
-                Log.d(TAG, "  - title: " + article.getTitle());
-                Log.d(TAG, "  - desc: " + (article.getDescription() != null ? 
-                    article.getDescription().substring(0, Math.min(50, article.getDescription().length())) + "..." : "null"));
-                Log.d(TAG, "  - image: " + article.getUrlToImage());
-            }
+    /**
+     * Returns the current list of articles in the adapter
+     * @return A new list containing all current articles
+     */
+    public List<Article> getArticles() {
+        if (articles == null) {
+            return new ArrayList<>();
         }
+        return new ArrayList<>(articles);
     }
 
     @NonNull

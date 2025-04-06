@@ -137,4 +137,21 @@ public class Article {
             this.url = url;
         }
     }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        
+        Article article = (Article) o;
+        
+        // We consider articles equal if they have the same URL
+        return url != null ? url.equals(article.url) : article.url == null;
+    }
+
+    @Override
+    public int hashCode() {
+        // URL is the unique identifier
+        return url != null ? url.hashCode() : 0;
+    }
 }

@@ -169,11 +169,14 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginHorizontal="16dp"
+                android:layout_marginTop="16dp"
                 android:layout_marginBottom="24dp"
                 android:text="Load More"
+                android:textSize="16sp"
+                android:padding="12dp"
                 android:textColor="@android:color/white"
                 android:backgroundTint="@color/primary_color"
-                android:visibility="gone"/>
+                android:visibility="visible"/>
 
             <ProgressBar
                 android:id="@+id/pagination_loading_indicator"

@@ -11,7 +11,7 @@ public interface GNewsApiService {
     Call<NewsResponse> searchNews(
         @Query("q") String query,
         @Query("max") int max,
-        @Query("page") int page,
+        @Query("offset") int offset,
         @Query("apikey") String apiKey
     );
     
