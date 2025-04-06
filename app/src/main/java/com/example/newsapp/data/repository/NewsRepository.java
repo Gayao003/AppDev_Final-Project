@@ -339,4 +339,59 @@ public class NewsRepository {
         currentRegularArticles.clear();
         Log.d(TAG, "Reset articles state, offset=0");
     }
+    
+    /**
+     * Search for articles using the GNews API
+     */
+    public void searchArticles(String query, NewsCallback callback) {
+        Log.d(TAG, "Searching for articles with query: " + query);
+        
+        // Use search endpoint which works better for search queries
+        Call<NewsResponse> searchCall = apiService.searchNews(
+            query,                  // search query
+            ARTICLES_PER_PAGE,      // max results
+            0,                      // offset - start from beginning
+            API_KEY                 // API key
+        );
+        
+        searchCall.enqueue(new Callback<NewsResponse>() {
+            @Override
+            public void onResponse(Call<NewsResponse> call, Response<NewsResponse> response) {
+                if (response.isSuccessful() && response.body() != null) {
+                    NewsResponse newsResponse = response.body();
+                    List<Article> articles = newsResponse.getArticles();
+                    
+                    if (!articles.isEmpty()) {
+                        Log.d(TAG, "Search returned " + articles.size() + " articles for query: " + query);
+                        
+                        // Save to database with special search category
+                        for (Article article : articles) {
+                            article.setCategory("search_" + query);
+                            article.setFeatured(false);
+                            article.setTimestamp(System.currentTimeMillis());
+                        }
+                        
+                        saveArticlesToDb("search_" + query, articles, false);
+                        
+                        // Return articles to caller
+                        mainHandler.post(() -> callback.onSuccess(articles));
+                    } else {
+                        Log.d(TAG, "Search returned empty list for query: " + query);
+                        mainHandler.post(() -> callback.onSuccess(new ArrayList<>()));
+                    }
+                } else {
+                    String errorMsg = "Failed to search articles";
+                    Log.e(TAG, errorMsg);
+                    mainHandler.post(() -> callback.onError(errorMsg));
+                }
+            }
+            
+            @Override
+            public void onFailure(Call<NewsResponse> call, Throwable t) {
+                String errorMsg = "Network error: " + t.getMessage();
+                Log.e(TAG, errorMsg, t);
+                mainHandler.post(() -> callback.onError(errorMsg));
+            }
+        });
+    }
 } 

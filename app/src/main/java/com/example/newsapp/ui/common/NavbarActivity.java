@@ -14,7 +14,6 @@ import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.example.newsapp.R;
 import com.example.newsapp.ui.profile.ProfileFragment;
 import com.example.newsapp.ui.home.HomeFragment;
-import com.example.newsapp.ui.categories.CategoriesFragment;
 import com.example.newsapp.ui.search.SearchFragment;
 import com.example.newsapp.ui.bookmarks.BookmarksFragment;
 
@@ -39,11 +38,14 @@ public class NavbarActivity extends AppCompatActivity {
             return;
         }
 
-        // Load the ProfileFragment by default
-        loadFragment(new ProfileFragment());
+        // Load the HomeFragment by default
+        loadFragment(new HomeFragment());
 
         // Setup bottom navigation
         setupBottomNavigation();
+        
+        // Set Home as the selected item
+        bottomNavigationView.setSelectedItemId(R.id.navigation_home);
     }
 
     private void loadFragment(Fragment fragment) {
@@ -59,16 +61,14 @@ public class NavbarActivity extends AppCompatActivity {
             Fragment selectedFragment = null;
             int id = item.getItemId();
 
-            if (id == R.id.navigation_profile) {
-                selectedFragment = new ProfileFragment();
-            } else if (id == R.id.navigation_home) {
+            if (id == R.id.navigation_home) {
                 selectedFragment = new HomeFragment();
-            } else if (id == R.id.navigation_categories) {
-                selectedFragment = new CategoriesFragment();
             } else if (id == R.id.navigation_search) {
                 selectedFragment = new SearchFragment();
             } else if (id == R.id.navigation_bookmarks) {
                 selectedFragment = new BookmarksFragment();
+            } else if (id == R.id.navigation_profile) {
+                selectedFragment = new ProfileFragment();
             }
 
             if (selectedFragment != null) {
@@ -76,6 +76,5 @@ public class NavbarActivity extends AppCompatActivity {
             }
             return true;
         });
-
     }
 }
