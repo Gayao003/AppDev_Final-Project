@@ -50,7 +50,7 @@ public class CategoryAdapter extends RecyclerView.Adapter<CategoryAdapter.Catego
     public int getItemCount() {
         return categories.size();
     }
-
+    
     class CategoryViewHolder extends RecyclerView.ViewHolder {
         MaterialButton button;
 
