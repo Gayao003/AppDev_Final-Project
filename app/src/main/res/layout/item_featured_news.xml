@@ -2,36 +2,33 @@
 <com.google.android.material.card.MaterialCardView
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    android:layout_width="match_parent"
-    android:layout_height="wrap_content"
-    android:layout_marginHorizontal="16dp"
-    android:layout_marginVertical="8dp"
-    app:cardCornerRadius="8dp"
-    app:cardElevation="2dp"
+    android:layout_width="300dp"
+    android:layout_height="200dp"
+    android:layout_margin="8dp"
+    app:cardCornerRadius="12dp"
+    app:cardElevation="4dp"
     android:theme="@style/Theme.Material3.Light"
     app:cardBackgroundColor="@color/white">
 
-    <LinearLayout
+    <RelativeLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:padding="12dp">
+        android:layout_height="match_parent">
 
         <ImageView
-            android:id="@+id/news_image"
-            android:layout_width="100dp"
-            android:layout_height="100dp"
-            android:scaleType="centerCrop"
-            app:cornerRadius="8dp"/>
+            android:id="@+id/featured_news_image"
+            android:layout_width="match_parent"
+            android:layout_height="120dp"
+            android:scaleType="centerCrop"/>
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_below="@id/featured_news_image"
             android:orientation="vertical"
-            android:layout_marginStart="12dp">
+            android:padding="12dp">
 
             <TextView
-                android:id="@+id/news_title"
+                android:id="@+id/featured_news_title"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:maxLines="2"
@@ -41,14 +38,14 @@
                 android:textColor="@color/text_primary"/>
 
             <TextView
-                android:id="@+id/news_description"
+                android:id="@+id/featured_news_description"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
-                android:maxLines="3"
+                android:maxLines="2"
                 android:ellipsize="end"
                 android:textSize="14sp"
                 android:textColor="@color/text_secondary"/>
         </LinearLayout>
-    </LinearLayout>
+    </RelativeLayout>
 </com.google.android.material.card.MaterialCardView>
