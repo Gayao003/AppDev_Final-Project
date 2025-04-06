@@ -91,7 +91,81 @@ public class ProfileFragment extends Fragment {
         
         setupProfileHeader(view);
         setupOptions(view);
+
+        validateAccountLinkStatus();
+
     }
+/**
+ * Validates and synchronizes the account link status between Firebase Auth and Firestore
+ */
+private void validateAccountLinkStatus() {
+    // First check Firebase Auth providers
+    final boolean isLinkedByProviders = checkIfGoogleProviderLinked();
+    
+    // Initial UI update based on provider data
+    updateGoogleLinkStatus(isLinkedByProviders);
+    
+    // Then verify with Firestore data for consistency
+    if (currentUser != null) {
+        db.collection("users").document(currentUser.getUid())
+            .get()
+            .addOnSuccessListener(document -> {
+                if (document.exists()) {
+                    // Check if the Firestore data matches what we determined from providers
+                    String linkedProviders = document.getString("linkedProviders");
+                    String provider = document.getString("provider");
+                    
+                    boolean isLinkedInFirestore = 
+                        (linkedProviders != null && linkedProviders.contains("google")) ||
+                        (provider != null && provider.contains("google"));
+                    
+                    // If there's a mismatch, update Firestore to match the actual provider status
+                    if (isLinkedByProviders != isLinkedInFirestore) {
+                        updateFirestoreWithCorrectLinkStatus(document, isLinkedByProviders);
+                    }
+                    
+                    // Final UI update based on the provider status
+                    updateGoogleLinkStatus(isLinkedByProviders);
+                }
+            });
+    }
+}
+
+/**
+ * Checks if Google provider is linked in Firebase Auth
+ */
+private boolean checkIfGoogleProviderLinked() {
+    if (currentUser != null && currentUser.getProviderData() != null) {
+        for (UserInfo profile : currentUser.getProviderData()) {
+            Log.d(TAG, "Provider: " + profile.getProviderId());
+            if (profile.getProviderId().equals(GoogleAuthProvider.PROVIDER_ID)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+/**
+ * Updates Firestore data to reflect the correct link status
+ */
+private void updateFirestoreWithCorrectLinkStatus(com.google.firebase.firestore.DocumentSnapshot document, boolean isLinked) {
+    Map<String, Object> updates = new HashMap<>();
+    if (isLinked) {
+        updates.put("linkedProviders", "google");
+        updates.put("provider", document.getString("provider") != null ? 
+            document.getString("provider") + ",google" : "google");
+    } else {
+        updates.put("linkedProviders", "");
+        updates.put("provider", "email");
+    }
+    
+    // Update Firestore with correct data
+    db.collection("users").document(currentUser.getUid())
+        .update(updates)
+        .addOnSuccessListener(aVoid -> 
+            Log.d(TAG, "Account link status synchronized"));
+}
     
     /**
      * Logs the current auth providers for debugging purposes
@@ -258,16 +332,37 @@ private void navigateToFragment(Fragment fragment) {
     /**
      * Checks if a Google account is linked to the current user
      */
-    private boolean isGoogleAccountLinked() {
-        if (currentUser != null && currentUser.getProviderData() != null) {
-            for (UserInfo profile : currentUser.getProviderData()) {
-                if (profile.getProviderId().equals(GoogleAuthProvider.PROVIDER_ID)) {
-                    return true;
-                }
+private boolean isGoogleAccountLinked() {
+    if (currentUser != null && currentUser.getProviderData() != null) {
+        for (UserInfo profile : currentUser.getProviderData()) {
+            // Check specifically for Google Auth provider
+            if (profile.getProviderId().equals(GoogleAuthProvider.PROVIDER_ID)) {
+                return true;
             }
         }
-        return false;
+        
+        // If we didn't find a Google provider, check Firestore data as backup
+        db.collection("users").document(currentUser.getUid())
+            .get()
+            .addOnSuccessListener(document -> {
+                if (document.exists() && document.contains("linkedProviders")) {
+                    String linkedProviders = document.getString("linkedProviders");
+                    if (linkedProviders != null && linkedProviders.contains("google")) {
+                        // Update UI to show linked status
+                        updateGoogleLinkStatus(true);
+                    } else {
+                        updateGoogleLinkStatus(false);
+                    }
+                } else {
+                    updateGoogleLinkStatus(false);
+                }
+            });
     }
+    
+    // Return immediate result based on provider data only
+    // The Firestore check will update UI asynchronously if needed
+    return false;
+}
     
     /**
      * Updates the UI to reflect the Google account linking status
@@ -353,31 +448,44 @@ private void navigateToFragment(Fragment fragment) {
     /**
      * Handles errors that occur during the account linking process
      */
-    private void handleLinkingError(Exception exception) {
-        if (exception != null && exception.getMessage() != null) {
-            String errorMessage = exception.getMessage();
-            if (errorMessage.contains("already linked")) {
-                Toast.makeText(getActivity(), 
-                        "This Google account is already linked to your profile", 
-                        Toast.LENGTH_SHORT).show();
-                
-                // Update UI since account is actually linked
-                updateGoogleLinkStatus(true);
-            } else if (errorMessage.contains("already exists")) {
-                Toast.makeText(getActivity(), 
-                        "This Google account is already used by another user", 
-                        Toast.LENGTH_SHORT).show();
-            } else {
-                Toast.makeText(getActivity(), 
-                        "Failed to link Google account: " + errorMessage, 
-                        Toast.LENGTH_SHORT).show();
-            }
+private void handleLinkingError(Exception exception) {
+    if (exception != null && exception.getMessage() != null) {
+        String errorMessage = exception.getMessage();
+        Log.d(TAG, "Link error message: " + errorMessage);
+        
+        if (errorMessage.contains("already linked")) {
+            Toast.makeText(getActivity(), 
+                "This Google account is already linked to your profile", 
+                Toast.LENGTH_SHORT).show();
+            
+            // Update UI since account is actually linked
+            updateGoogleLinkStatus(true);
+        } else if (errorMessage.contains("already exists") || 
+                  errorMessage.contains("email already in use")) {
+            // This could be "credential already in use" or similar messages
+            Toast.makeText(getActivity(), 
+                "This Google account is already used by another user", 
+                Toast.LENGTH_SHORT).show();
+            
+            // Make sure UI shows not linked
+            updateGoogleLinkStatus(false);
         } else {
             Toast.makeText(getActivity(), 
-                    "Failed to link Google account", 
-                    Toast.LENGTH_SHORT).show();
+                "Failed to link Google account: " + errorMessage, 
+                Toast.LENGTH_SHORT).show();
+            
+            // Make sure UI shows not linked
+            updateGoogleLinkStatus(false);
         }
+    } else {
+        Toast.makeText(getActivity(), 
+            "Failed to link Google account", 
+            Toast.LENGTH_SHORT).show();
+        
+        // Make sure UI shows not linked
+        updateGoogleLinkStatus(false);
     }
+}
 
     private void updateUserDataAfterLinking() {
         // Update the user document to indicate multiple auth providers
