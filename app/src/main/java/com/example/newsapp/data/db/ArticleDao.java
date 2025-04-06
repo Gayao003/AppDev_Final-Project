@@ -12,28 +12,23 @@ import java.util.List;
 
 @Dao
 public interface ArticleDao {
+    @Query("SELECT * FROM articles WHERE category = :category AND isFeatured = :isFeatured ORDER BY timestamp DESC")
+    List<Article> getArticlesByCategoryAndType(String category, boolean isFeatured);
     
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     void insertArticles(List<Article> articles);
     
-    @Query("SELECT * FROM articles WHERE category = :category AND isFeatured = :isFeatured ORDER BY timestamp DESC")
-    List<Article> getArticlesByCategoryAndType(String category, boolean isFeatured);
+    @Query("DELETE FROM articles WHERE category = :category AND isFeatured = :isFeatured")
+    void deleteArticlesByCategoryAndType(String category, boolean isFeatured);
     
-    @Query("SELECT * FROM articles WHERE category = :category ORDER BY timestamp DESC")
-    List<Article> getArticlesByCategory(String category);
-    
-    @Query("DELETE FROM articles WHERE category = :category")
-    void deleteArticlesByCategory(String category);
-    
-    @Query("DELETE FROM articles WHERE timestamp < :timestamp")
-    void deleteOldArticles(long timestamp);
+    @Query("DELETE FROM articles WHERE timestamp < :expirationTime")
+    void deleteOldArticles(long expirationTime);
     
     @Transaction
     default void updateCategoryArticles(String category, List<Article> articles, boolean isFeatured) {
-        // Delete existing articles of this category and type
-        if (isFeatured) {
-            deleteArticlesByCategory(category);
-        }
+        // Delete old articles of this category and type
+        deleteArticlesByCategoryAndType(category, isFeatured);
+        
         // Insert new articles
         insertArticles(articles);
     }

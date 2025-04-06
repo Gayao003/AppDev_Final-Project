@@ -6,6 +6,7 @@
     android:background="@color/background_color">
 
     <androidx.core.widget.NestedScrollView
+        android:id="@+id/scroll_view"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:clipToPadding="false"
@@ -46,15 +47,30 @@
                     
             </androidx.cardview.widget.CardView>
 
-            <TextView
-                android:layout_width="wrap_content"
+            <LinearLayout
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Featured Stories"
-                android:textSize="20sp"
-                android:textColor="@color/text_primary"
-                android:textStyle="bold"
+                android:orientation="horizontal"
                 android:layout_marginStart="16dp"
-                android:layout_marginBottom="12dp"/>
+                android:layout_marginEnd="16dp"
+                android:layout_marginBottom="12dp"
+                android:gravity="center_vertical">
+                
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Featured Stories"
+                    android:textSize="20sp"
+                    android:textColor="@color/text_primary"
+                    android:textStyle="bold"/>
+                    
+                <View
+                    android:layout_width="0dp"
+                    android:layout_height="1dp"
+                    android:layout_weight="1"
+                    android:layout_marginStart="16dp"
+                    android:background="@color/divider_color"/>
+            </LinearLayout>
                 
             <FrameLayout
                 android:layout_width="match_parent"
@@ -90,15 +106,30 @@
                     android:visibility="gone"/>
             </FrameLayout>
 
-            <TextView
-                android:layout_width="wrap_content"
+            <LinearLayout
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Latest News"
-                android:textSize="20sp"
-                android:textColor="@color/text_primary"
-                android:textStyle="bold"
+                android:orientation="horizontal"
                 android:layout_marginStart="16dp"
-                android:layout_marginBottom="12dp"/>
+                android:layout_marginEnd="16dp"
+                android:layout_marginBottom="12dp"
+                android:gravity="center_vertical">
+                
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Latest News"
+                    android:textSize="20sp"
+                    android:textColor="@color/text_primary"
+                    android:textStyle="bold"/>
+                    
+                <View
+                    android:layout_width="0dp"
+                    android:layout_height="1dp"
+                    android:layout_weight="1"
+                    android:layout_marginStart="16dp"
+                    android:background="@color/divider_color"/>
+            </LinearLayout>
                 
             <FrameLayout
                 android:layout_width="match_parent"
@@ -132,6 +163,28 @@
                     android:layout_marginVertical="50dp"
                     android:visibility="gone"/>
             </FrameLayout>
+            
+            <Button
+                android:id="@+id/load_more_button"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="16dp"
+                android:layout_marginBottom="24dp"
+                android:text="Load More"
+                android:textColor="@android:color/white"
+                android:backgroundTint="@color/primary_color"
+                android:visibility="gone"/>
+
+            <ProgressBar
+                android:id="@+id/pagination_loading_indicator"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="16dp"
+                android:layout_marginBottom="24dp"
+                android:indeterminate="true"
+                android:indeterminateTint="@color/primary_color"
+                android:visibility="gone"/>
 
         </LinearLayout>
 

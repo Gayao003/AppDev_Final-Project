@@ -1,6 +1,5 @@
 package com.example.newsapp.api;
 
-import com.example.newsapp.data.models.Article;
 import com.example.newsapp.data.models.NewsResponse;
 
 import retrofit2.Call;
@@ -22,6 +21,7 @@ public interface GNewsApiService {
         @Query("lang") String language,
         @Query("country") String country,
         @Query("max") int max,
+        @Query("page") int page,
         @Query("apikey") String apiKey
     );
 }

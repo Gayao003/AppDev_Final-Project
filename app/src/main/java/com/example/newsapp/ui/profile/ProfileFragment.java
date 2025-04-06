@@ -215,34 +215,113 @@ private void updateFirestoreWithCorrectLinkStatus(com.google.firebase.firestore.
     /**
      * Sets up the profile header with user information
      */
-// Change this method to use fragment navigation instead of Intent
-private void setupProfileHeader(View view) {
-    ImageView profileImage = view.findViewById(R.id.profile_image);
-    TextView profileName = view.findViewById(R.id.profile_name);
-    TextView profileEmail = view.findViewById(R.id.profile_email);
-    ImageView editProfileButton = view.findViewById(R.id.edit_profile_button);
-    
-    if (currentUser != null) {
-        // Set user name and email
-        profileName.setText(currentUser.getDisplayName() != null ? 
-                currentUser.getDisplayName() : "User");
-        profileEmail.setText(currentUser.getEmail());
+    private void setupProfileHeader(View view) {
+        ImageView profileImage = view.findViewById(R.id.profile_image);
+        TextView profileName = view.findViewById(R.id.profile_name);
+        TextView profileEmail = view.findViewById(R.id.profile_email);
+        TextView membershipStatus = view.findViewById(R.id.membership_status);
+        ImageView editProfileButton = view.findViewById(R.id.edit_profile_button);
         
-        // Load profile image if available
-        if (currentUser.getPhotoUrl() != null) {
-            Glide.with(this)
-                .load(currentUser.getPhotoUrl())
-                .circleCrop()
-                .placeholder(R.drawable.default_profile_image)
-                .into(profileImage);
+        Log.d(TAG, "Setting up profile header");
+        
+        if (currentUser != null) {
+            // Set user name and email
+            String displayName = currentUser.getDisplayName();
+            String email = currentUser.getEmail();
+            
+            Log.d(TAG, "Firebase User data - Name: " + displayName + ", Email: " + email);
+            
+            // Set initial values from Firebase Auth
+            if (email != null && !email.isEmpty()) {
+                profileEmail.setText(email);
+            } else {
+                profileEmail.setText("No email available");
+            }
+            
+            if (displayName != null && !displayName.isEmpty()) {
+                profileName.setText(displayName);
+            } else {
+                // If no display name, we'll update it from Firestore
+                profileName.setText("User");
+            }
+            
+            // Load profile image if available
+            if (currentUser.getPhotoUrl() != null) {
+                Glide.with(this)
+                    .load(currentUser.getPhotoUrl())
+                    .circleCrop()
+                    .placeholder(R.drawable.default_profile_image)
+                    .into(profileImage);
+            }
+            
+            // Load additional user data from Firestore
+            loadUserDataFromFirestore(profileName, profileEmail, membershipStatus);
+        } else {
+            // Set default values if user is null (should not normally happen)
+            Log.w(TAG, "Current user is null in profile header setup");
+            profileName.setText("Guest User");
+            profileEmail.setText("Not signed in");
+            membershipStatus.setText("Guest");
         }
+        
+        // Set edit profile button click listener - now using fragment navigation
+        editProfileButton.setOnClickListener(v -> {
+            navigateToFragment(new AccountDetailsFragment());
+        });
     }
-    
-    // Set edit profile button click listener - now using fragment navigation
-    editProfileButton.setOnClickListener(v -> {
-        navigateToFragment(new AccountDetailsFragment());
-    });
-}
+
+    private void loadUserDataFromFirestore(TextView profileName, TextView profileEmail, TextView membershipStatus) {
+        if (currentUser == null) return;
+        
+        Log.d(TAG, "Loading user data from Firestore for UID: " + currentUser.getUid());
+        
+        db.collection("users").document(currentUser.getUid())
+            .get()
+            .addOnSuccessListener(document -> {
+                if (document.exists()) {
+                    Log.d(TAG, "Firestore document exists for user");
+                    
+                    // Get name from Firestore
+                    String name = document.getString("name");
+                    if (name != null && !name.isEmpty()) {
+                        Log.d(TAG, "Found name in Firestore: " + name);
+                        profileName.setText(name);
+                    } else {
+                        Log.d(TAG, "No name field in Firestore, checking fullName");
+                        // Fallback to fullName if name is not available
+                        String fullName = document.getString("fullName");
+                        if (fullName != null && !fullName.isEmpty()) {
+                            Log.d(TAG, "Found fullName in Firestore: " + fullName);
+                            profileName.setText(fullName);
+                        }
+                    }
+                    
+                    // Get email from Firestore as backup
+                    String emailFromFirestore = document.getString("email");
+                    if (emailFromFirestore != null && !emailFromFirestore.isEmpty() && 
+                        (profileEmail.getText().toString().isEmpty() || profileEmail.getText().toString().equals("No email available"))) {
+                        Log.d(TAG, "Using email from Firestore: " + emailFromFirestore);
+                        profileEmail.setText(emailFromFirestore);
+                    }
+                    
+                    // Check membership status
+                    String membership = document.getString("membership");
+                    if (membership != null && !membership.isEmpty()) {
+                        membershipStatus.setText(membership);
+                        membershipStatus.setVisibility(View.VISIBLE);
+                    } else {
+                        // Set default membership if not available
+                        membershipStatus.setText("Free User");
+                        membershipStatus.setVisibility(View.VISIBLE);
+                    }
+                } else {
+                    Log.w(TAG, "No user document found in Firestore");
+                }
+            })
+            .addOnFailureListener(e -> {
+                Log.e(TAG, "Error loading user data from Firestore", e);
+            });
+    }
 
 // Update setupOptions to use fragment navigation
 private void setupOptions(View view) {
