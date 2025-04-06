@@ -13,6 +13,15 @@ public interface GNewsApiService {
         @Query("q") String query,
         @Query("max") int max,
         @Query("page") int page,
-        @Query("token") String token
+        @Query("apikey") String apiKey
+    );
+    
+    @GET("top-headlines")
+    Call<NewsResponse> getTopHeadlines(
+        @Query("topic") String topic,
+        @Query("lang") String language,
+        @Query("country") String country,
+        @Query("max") int max,
+        @Query("apikey") String apiKey
     );
 }

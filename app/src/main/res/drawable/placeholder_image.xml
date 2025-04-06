@@ -2,24 +2,32 @@
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item>
         <shape android:shape="rectangle">
-            <solid android:color="#E0E0E0"/>
+            <solid android:color="#E8EAF6"/>
+            <corners android:radius="8dp"/>
         </shape>
     </item>
     <item
         android:gravity="center"
         android:width="48dp"
         android:height="48dp">
-        <shape android:shape="rectangle">
-            <solid android:color="#D3D3D3"/>
-            <corners android:radius="4dp"/>
-        </shape>
-    </item>
-    <item
-        android:gravity="center"
-        android:width="24dp"
-        android:height="24dp">
-        <shape android:shape="rectangle">
-            <solid android:color="#CCCCCC"/>
-        </shape>
+        <vector xmlns:android="http://schemas.android.com/apk/res/android"
+            android:width="48dp"
+            android:height="48dp"
+            android:viewportWidth="24"
+            android:viewportHeight="24"
+            android:tint="#6C63FF">
+            <path
+                android:fillColor="#6C63FF"
+                android:pathData="M22,3L2,3v15h5l-1,2h12l-1,-2h5L22,3zM20,16L4,16L4,5h16v11z"/>
+            <path
+                android:fillColor="#6C63FF"
+                android:pathData="M6,7h12v2h-12z"/>
+            <path
+                android:fillColor="#6C63FF"
+                android:pathData="M6,10h12v2h-12z"/>
+            <path
+                android:fillColor="#6C63FF"
+                android:pathData="M6,13h5v2h-5z"/>
+        </vector>
     </item>
 </layer-list>

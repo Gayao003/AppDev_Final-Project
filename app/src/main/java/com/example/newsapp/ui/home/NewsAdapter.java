@@ -1,5 +1,6 @@
 package com.example.newsapp.ui.home;
 
+import android.text.TextUtils;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -9,9 +10,11 @@ import androidx.annotation.NonNull;
 import androidx.fragment.app.FragmentActivity;
 import androidx.recyclerview.widget.RecyclerView;
 import com.bumptech.glide.Glide;
+import com.bumptech.glide.load.engine.DiskCacheStrategy;
 import com.bumptech.glide.load.resource.bitmap.CenterCrop;
 import com.bumptech.glide.load.resource.bitmap.RoundedCorners;
 import com.bumptech.glide.load.resource.drawable.DrawableTransitionOptions;
+import com.bumptech.glide.request.RequestOptions;
 import com.example.newsapp.R;
 import com.example.newsapp.data.models.Article;
 import com.example.newsapp.ui.article.ArticleDetailFragment;
@@ -72,13 +75,7 @@ public class NewsAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
             title.setText(article.getTitle());
             description.setText(article.getDescription());
             
-            Glide.with(itemView.getContext())
-                .load(article.getUrlToImage())
-                .placeholder(R.drawable.placeholder_image)
-                .error(R.drawable.error_image)
-                .transform(new CenterCrop(), new RoundedCorners(8)) // Add rounded corners
-                .transition(DrawableTransitionOptions.withCrossFade()) // Add fade animation
-                .into(imageView);
+            loadImage(article.getUrlToImage(), imageView);
 
             itemView.setOnClickListener(v -> {
                 // Create an instance of ArticleDetailFragment and pass the article URL
@@ -108,13 +105,7 @@ public class NewsAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
             title.setText(article.getTitle());
             description.setText(article.getDescription());
             
-            Glide.with(itemView.getContext())
-                .load(article.getUrlToImage())
-                .placeholder(R.drawable.placeholder_image)
-                .error(R.drawable.error_image)
-                .transform(new CenterCrop(), new RoundedCorners(8)) // Add rounded corners
-                .transition(DrawableTransitionOptions.withCrossFade()) // Add fade animation
-                .into(imageView);
+            loadImage(article.getUrlToImage(), imageView);
 
             itemView.setOnClickListener(v -> {
                 // Create an instance of ArticleDetailFragment and pass the article URL
@@ -126,6 +117,29 @@ public class NewsAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
                     .addToBackStack(null)
                     .commit();
             });
+        }
+    }
+    
+    private static void loadImage(String imageUrl, ImageView imageView) {
+        RequestOptions requestOptions = new RequestOptions()
+            .placeholder(R.drawable.placeholder_image)
+            .error(R.drawable.error_image)
+            .diskCacheStrategy(DiskCacheStrategy.ALL)
+            .transform(new CenterCrop(), new RoundedCorners(16));
+            
+        // Check if URL is valid and not empty
+        if (!TextUtils.isEmpty(imageUrl) && (imageUrl.startsWith("http://") || imageUrl.startsWith("https://"))) {
+            Glide.with(imageView.getContext())
+                .load(imageUrl)
+                .apply(requestOptions)
+                .transition(DrawableTransitionOptions.withCrossFade(300))
+                .into(imageView);
+        } else {
+            // If URL is invalid, directly show error image
+            Glide.with(imageView.getContext())
+                .load(R.drawable.error_image)
+                .apply(requestOptions)
+                .into(imageView);
         }
     }
 }

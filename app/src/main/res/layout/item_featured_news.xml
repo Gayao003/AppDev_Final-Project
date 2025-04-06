@@ -3,29 +3,37 @@
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="300dp"
-    android:layout_height="200dp"
+    android:layout_height="220dp"
     android:layout_margin="8dp"
-    app:cardCornerRadius="12dp"
+    app:cardCornerRadius="16dp"
     app:cardElevation="4dp"
-    android:theme="@style/Theme.Material3.Light"
+    app:rippleColor="@color/primary_color"
+    android:clickable="true"
+    android:focusable="true"
+    android:foreground="?attr/selectableItemBackground"
     app:cardBackgroundColor="@color/white">
 
-    <RelativeLayout
+    <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent">
 
         <ImageView
             android:id="@+id/featured_news_image"
             android:layout_width="match_parent"
-            android:layout_height="120dp"
+            android:layout_height="match_parent"
             android:scaleType="centerCrop"/>
+            
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@drawable/gradient_overlay"/>
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_below="@id/featured_news_image"
             android:orientation="vertical"
-            android:padding="12dp">
+            android:padding="16dp"
+            android:layout_gravity="bottom">
 
             <TextView
                 android:id="@+id/featured_news_title"
@@ -33,19 +41,33 @@
                 android:layout_height="wrap_content"
                 android:maxLines="2"
                 android:ellipsize="end"
-                android:textSize="16sp"
+                android:textSize="18sp"
                 android:textStyle="bold"
-                android:textColor="@color/text_primary"/>
+                android:textColor="@android:color/white"/>
 
             <TextView
                 android:id="@+id/featured_news_description"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
+                android:layout_marginTop="6dp"
                 android:maxLines="2"
                 android:ellipsize="end"
                 android:textSize="14sp"
-                android:textColor="@color/text_secondary"/>
+                android:alpha="0.9"
+                android:textColor="@android:color/white"/>
+                
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="Read full story"
+                android:textColor="@android:color/white"
+                android:textSize="12sp"
+                android:alpha="0.95"
+                android:textStyle="bold"
+                android:drawableEnd="@drawable/ic_arrow_right"
+                android:drawablePadding="4dp"
+                android:drawableTint="@android:color/white"/>
         </LinearLayout>
-    </RelativeLayout>
+    </FrameLayout>
 </com.google.android.material.card.MaterialCardView>
