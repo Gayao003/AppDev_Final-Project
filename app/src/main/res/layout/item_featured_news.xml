@@ -69,5 +69,18 @@
                 android:drawablePadding="4dp"
                 android:drawableTint="@android:color/white"/>
         </LinearLayout>
+
+        <ImageButton
+            android:id="@+id/bookmark_button"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_gravity="top|end"
+            android:layout_margin="8dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Bookmark article"
+            android:elevation="4dp"
+            android:padding="8dp"
+            android:src="@drawable/ic_bookmark_border"
+            app:tint="@android:color/white" />
     </FrameLayout>
 </com.google.android.material.card.MaterialCardView>

@@ -23,6 +23,7 @@ public class Article {
     private boolean isFeatured;
     private long timestamp;
     private String content;
+    private boolean isBookmarked;
     
     @Ignore
     private Source source;
@@ -104,6 +105,14 @@ public class Article {
     
     public void setSource(Source source) {
         this.source = source;
+    }
+    
+    public boolean isBookmarked() {
+        return isBookmarked;
+    }
+    
+    public void setBookmarked(boolean bookmarked) {
+        isBookmarked = bookmarked;
     }
     
     // Helper method for debugging

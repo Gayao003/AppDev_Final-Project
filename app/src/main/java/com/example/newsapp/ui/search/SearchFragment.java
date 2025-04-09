@@ -22,6 +22,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.example.newsapp.R;
 import com.example.newsapp.data.models.Article;
 import com.example.newsapp.data.repository.NewsRepository;
+import com.example.newsapp.data.repository.BookmarkSyncRepository;
 import com.example.newsapp.ui.home.NewsAdapter;
 import com.google.android.material.chip.Chip;
 import com.google.android.material.chip.ChipGroup;
@@ -65,6 +66,9 @@ public class SearchFragment extends Fragment {
         // Initialize repository
         newsRepository = new NewsRepository(requireContext());
         
+        // Initialize bookmarkSyncRepository
+        BookmarkSyncRepository bookmarkSyncRepository = new BookmarkSyncRepository(requireContext());
+        
         // Initialize views
         searchEditText = view.findViewById(R.id.search_edit_text);
         searchButton = view.findViewById(R.id.search_button);
@@ -75,7 +79,7 @@ public class SearchFragment extends Fragment {
         
         // Setup RecyclerView
         resultsRecyclerView.setLayoutManager(new LinearLayoutManager(getContext()));
-        resultsAdapter = new NewsAdapter(new ArrayList<>(), false);
+        resultsAdapter = new NewsAdapter(new ArrayList<>(), false, bookmarkSyncRepository);
         resultsRecyclerView.setAdapter(resultsAdapter);
         
         // Setup search button

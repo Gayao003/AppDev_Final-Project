@@ -1,12 +1,17 @@
 package com.example.newsapp.ui.home;
 
+import android.content.Context;
+import android.os.Handler;
+import android.os.Looper;
 import android.text.TextUtils;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.TextView;
+import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.fragment.app.FragmentActivity;
 import androidx.recyclerview.widget.RecyclerView;
@@ -18,6 +23,7 @@ import com.bumptech.glide.load.resource.drawable.DrawableTransitionOptions;
 import com.bumptech.glide.request.RequestOptions;
 import com.example.newsapp.R;
 import com.example.newsapp.data.models.Article;
+import com.example.newsapp.data.repository.BookmarkSyncRepository;
 import com.example.newsapp.ui.article.ArticleDetailFragment;
 import java.util.ArrayList;
 import java.util.List;
@@ -26,13 +32,15 @@ public class NewsAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
     private static final String TAG = "NewsAdapter";
     private List<Article> articles;
     private final boolean isFeatured;
+    private BookmarkSyncRepository bookmarkSyncRepository;
     
     private static final int VIEW_TYPE_FEATURED = 1;
     private static final int VIEW_TYPE_REGULAR = 2;
     
-    public NewsAdapter(List<Article> articles, boolean isFeatured) {
+    public NewsAdapter(List<Article> articles, boolean isFeatured, BookmarkSyncRepository bookmarkSyncRepository) {
         this.articles = new ArrayList<>(articles);
         this.isFeatured = isFeatured;
+        this.bookmarkSyncRepository = bookmarkSyncRepository;
     }
     
     public void updateArticles(List<Article> newArticles) {
@@ -95,15 +103,32 @@ public class NewsAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         return articles.size();
     }
 
-    static class NewsViewHolder extends RecyclerView.ViewHolder {
+    class NewsViewHolder extends RecyclerView.ViewHolder {
         TextView title, description;
         ImageView imageView;
+        ImageButton bookmarkButton;
 
         public NewsViewHolder(@NonNull View itemView) {
             super(itemView);
             title = itemView.findViewById(R.id.news_title);
             description = itemView.findViewById(R.id.news_description);
             imageView = itemView.findViewById(R.id.news_image);
+            bookmarkButton = itemView.findViewById(R.id.bookmark_button);
+            
+            // Add action if bookmark button exists
+            if (bookmarkButton != null) {
+                setupBookmarkButton();
+            }
+        }
+        
+        private void setupBookmarkButton() {
+            bookmarkButton.setOnClickListener(v -> {
+                int position = getAdapterPosition();
+                if (position != RecyclerView.NO_POSITION) {
+                    Article article = articles.get(position);
+                    toggleBookmark(article, bookmarkButton);
+                }
+            });
         }
 
         public void bind(Article article) {
@@ -116,6 +141,11 @@ public class NewsAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
             
             // Load image with proper error handling
             loadImage(article.getUrlToImage(), imageView);
+            
+            // Update bookmark button if it exists
+            if (bookmarkButton != null) {
+                updateBookmarkIcon(article, bookmarkButton);
+            }
 
             itemView.setOnClickListener(v -> {
                 if (article.getUrl() != null && !article.getUrl().isEmpty()) {
@@ -132,15 +162,32 @@ public class NewsAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         }
     }
 
-    static class FeaturedViewHolder extends RecyclerView.ViewHolder {
+    class FeaturedViewHolder extends RecyclerView.ViewHolder {
         TextView title, description;
         ImageView imageView;
+        ImageButton bookmarkButton;
 
         public FeaturedViewHolder(@NonNull View itemView) {
             super(itemView);
             title = itemView.findViewById(R.id.featured_news_title);
             description = itemView.findViewById(R.id.featured_news_description);
             imageView = itemView.findViewById(R.id.featured_news_image);
+            bookmarkButton = itemView.findViewById(R.id.bookmark_button);
+            
+            // Add action if bookmark button exists
+            if (bookmarkButton != null) {
+                setupBookmarkButton();
+            }
+        }
+        
+        private void setupBookmarkButton() {
+            bookmarkButton.setOnClickListener(v -> {
+                int position = getAdapterPosition();
+                if (position != RecyclerView.NO_POSITION) {
+                    Article article = articles.get(position);
+                    toggleBookmark(article, bookmarkButton);
+                }
+            });
         }
 
         public void bind(Article article) {
@@ -153,6 +200,11 @@ public class NewsAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
             
             // Load image with proper error handling
             loadImage(article.getUrlToImage(), imageView);
+            
+            // Update bookmark button if it exists
+            if (bookmarkButton != null) {
+                updateBookmarkIcon(article, bookmarkButton);
+            }
 
             itemView.setOnClickListener(v -> {
                 if (article.getUrl() != null && !article.getUrl().isEmpty()) {
@@ -167,6 +219,77 @@ public class NewsAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
                 }
             });
         }
+    }
+    
+    private void updateBookmarkIcon(Article article, ImageButton bookmarkButton) {
+        if (bookmarkSyncRepository != null) {
+            bookmarkSyncRepository.isArticleBookmarked(article.getUrl(), isBookmarked -> {
+                // Update the article in our list
+                article.setBookmarked(isBookmarked);
+                
+                // Update the button icon
+                if (isBookmarked) {
+                    bookmarkButton.setImageResource(R.drawable.ic_bookmark_filled);
+                } else {
+                    bookmarkButton.setImageResource(R.drawable.ic_bookmark_border);
+                }
+            });
+        }
+    }
+    
+    private void toggleBookmark(Article article, ImageButton bookmarkButton) {
+        if (article != null) {
+            if (article.isBookmarked()) {
+                // Remove bookmark
+                bookmarkSyncRepository.removeBookmark(article.getUrl(), new BookmarkSyncRepository.SyncCallback() {
+                    @Override
+                    public void onSuccess(boolean syncedToCloud) {
+                        article.setBookmarked(false);
+                        bookmarkButton.setImageResource(R.drawable.ic_bookmark_border);
+                        
+                        String message = syncedToCloud 
+                            ? "Removed from bookmarks and synced" 
+                            : "Removed from bookmarks (offline mode)";
+                            
+                        showToastOnMainThread(bookmarkButton.getContext(), message);
+                    }
+
+                    @Override
+                    public void onError(String message) {
+                        showToastOnMainThread(bookmarkButton.getContext(), "Failed to remove bookmark: " + message);
+                    }
+                });
+            } else {
+                // Add bookmark
+                bookmarkSyncRepository.addBookmark(article, new BookmarkSyncRepository.SyncCallback() {
+                    @Override
+                    public void onSuccess(boolean syncedToCloud) {
+                        article.setBookmarked(true);
+                        bookmarkButton.setImageResource(R.drawable.ic_bookmark_filled);
+                        
+                        String message = syncedToCloud 
+                            ? "Added to bookmarks and synced" 
+                            : "Added to bookmarks (offline mode)";
+                            
+                        showToastOnMainThread(bookmarkButton.getContext(), message);
+                    }
+
+                    @Override
+                    public void onError(String message) {
+                        showToastOnMainThread(bookmarkButton.getContext(), "Failed to bookmark: " + message);
+                    }
+                });
+            }
+        }
+    }
+    
+    /**
+     * Helper method to show Toast messages safely on the main thread
+     */
+    private void showToastOnMainThread(Context context, String message) {
+        new Handler(Looper.getMainLooper()).post(() -> {
+            Toast.makeText(context, message, Toast.LENGTH_SHORT).show();
+        });
     }
     
     private static void loadImage(String imageUrl, ImageView imageView) {

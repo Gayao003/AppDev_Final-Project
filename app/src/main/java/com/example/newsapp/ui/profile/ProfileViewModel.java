@@ -7,7 +7,7 @@ import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.example.newsapp.models.User;
-
+    
 public class ProfileViewModel extends ViewModel {
     private final MutableLiveData<User> userData = new MutableLiveData<>();
     private final FirebaseAuth mAuth = FirebaseAuth.getInstance();

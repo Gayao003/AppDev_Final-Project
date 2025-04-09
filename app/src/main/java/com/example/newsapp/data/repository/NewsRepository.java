@@ -12,8 +12,11 @@ import com.example.newsapp.data.db.NewsDatabase;
 import com.example.newsapp.data.models.Article;
 import com.example.newsapp.data.models.NewsResponse;
 
+import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 
@@ -108,15 +111,15 @@ public class NewsRepository {
     public void loadMoreNews(String category, int page, PaginatedNewsCallback callback) {
         Log.d(TAG, "Loading more news for category: " + category + ", page: " + page);
         
-        // Calculate offset based on page number
-        articlesOffset = (page - 1) * ARTICLES_PER_PAGE;
-        Log.d(TAG, "Using offset: " + articlesOffset + " for page " + page);
+        // Calculate offset based on page number - we use ARTICLES_PER_PAGE for consistency
+        int offset = (page - 1) * ARTICLES_PER_PAGE;
+        Log.d(TAG, "Using offset: " + offset + " for page " + page);
         
         // Use search endpoint which supports offset better than page parameter
         Call<NewsResponse> searchCall = apiService.searchNews(
             category,               // search query
             ARTICLES_PER_PAGE,      // max results
-            articlesOffset,         // offset instead of page
+            offset,                 // offset instead of page
             API_KEY                 // API key
         );
         
@@ -125,30 +128,63 @@ public class NewsRepository {
             public void onResponse(Call<NewsResponse> call, Response<NewsResponse> response) {
                 if (response.isSuccessful() && response.body() != null) {
                     NewsResponse newsResponse = response.body();
-                    List<Article> articles = newsResponse.getArticles();
+                    List<Article> newArticles = newsResponse.getArticles();
                     
-                    if (!articles.isEmpty()) {
-                        Log.d(TAG, "Successfully loaded " + articles.size() + " new articles with offset " + articlesOffset);
+                    if (!newArticles.isEmpty()) {
+                        Log.d(TAG, "Successfully loaded " + newArticles.size() + " new articles with offset " + offset);
                         
-                        // Save to database
-                        saveArticlesToDb(category, articles, false);
-                        
-                        // Log titles for debugging
-                        for (Article article : articles) {
-                            Log.d(TAG, "Loaded: " + article.getTitle());
+                        // Filter out duplicates from the new articles based on URL
+                        Set<String> existingUrls = new HashSet<>();
+                        for (Article article : currentRegularArticles) {
+                            if (article.getUrl() != null) {
+                                existingUrls.add(article.getUrl());
+                            }
                         }
                         
-                        // Always show more pages if we got articles
-                        boolean hasMorePages = articles.size() >= ARTICLES_PER_PAGE;
+                        // Filter out articles we already have by URL
+                        List<Article> uniqueNewArticles = new ArrayList<>();
+                        for (Article article : newArticles) {
+                            if (article.getUrl() != null && !existingUrls.contains(article.getUrl())) {
+                                uniqueNewArticles.add(article);
+                                // Also add to our tracking set
+                                existingUrls.add(article.getUrl());
+                            }
+                        }
                         
-                        // Return only the new articles
-                        callback.onSuccessWithHasMore(articles, hasMorePages);
+                        Log.d(TAG, "After filtering duplicates, we have " + uniqueNewArticles.size() + " unique new articles");
+                        
+                        // Save only unique articles to database
+                        if (!uniqueNewArticles.isEmpty()) {
+                            saveArticlesToDb(category, uniqueNewArticles, false);
+                            
+                            // Log titles for debugging
+                            for (Article article : uniqueNewArticles) {
+                                Log.d(TAG, "Loaded: " + article.getTitle());
+                            }
+                        }
+                        
+                        // Always show more pages if we got results back
+                        boolean hasMorePages = newArticles.size() >= ARTICLES_PER_PAGE;
+                        Log.d(TAG, "Setting hasMorePages=" + hasMorePages + " based on received " + newArticles.size() + " >= " + ARTICLES_PER_PAGE);
+                        
+                        // Return only the unique new articles
+                        callback.onSuccessWithHasMore(uniqueNewArticles, hasMorePages);
+                        
+                        // Add unique new articles to our tracked list
+                        currentRegularArticles.addAll(uniqueNewArticles);
                     } else {
-                        Log.d(TAG, "API returned empty list for offset " + articlesOffset);
-                        callback.onError("No more articles available");
+                        Log.d(TAG, "API returned empty list for offset " + offset);
+                        callback.onSuccessWithHasMore(new ArrayList<>(), false);
                     }
                 } else {
                     String errorMsg = "Failed to load more articles";
+                    if (response.errorBody() != null) {
+                        try {
+                            errorMsg += ": " + response.errorBody().string();
+                        } catch (IOException e) {
+                            Log.e(TAG, "Error reading error body", e);
+                        }
+                    }
                     callback.onError(errorMsg);
                 }
             }
@@ -332,25 +368,31 @@ public class NewsRepository {
     }
     
     /**
-     * Reset the repository state when changing categories
+     * Reset the state of the articles repository
      */
     public void resetArticles() {
-        articlesOffset = 0;
         currentRegularArticles.clear();
-        Log.d(TAG, "Reset articles state, offset=0");
+        
+        Log.d(TAG, "Reset articles repository state, cleared cached articles list");
     }
     
     /**
      * Search for articles using the GNews API
+     * @param query The search query
+     * @param page The page number (1-based)
+     * @param callback Callback for search results
      */
-    public void searchArticles(String query, NewsCallback callback) {
-        Log.d(TAG, "Searching for articles with query: " + query);
+    public void searchArticles(String query, int page, PaginatedNewsCallback callback) {
+        Log.d(TAG, "Searching for articles with query: " + query + ", page: " + page);
+        
+        // Calculate offset based on page number
+        int offset = (page - 1) * ARTICLES_PER_PAGE;
         
         // Use search endpoint which works better for search queries
         Call<NewsResponse> searchCall = apiService.searchNews(
             query,                  // search query
             ARTICLES_PER_PAGE,      // max results
-            0,                      // offset - start from beginning
+            offset,                 // offset - calculated from page
             API_KEY                 // API key
         );
         
@@ -362,25 +404,36 @@ public class NewsRepository {
                     List<Article> articles = newsResponse.getArticles();
                     
                     if (!articles.isEmpty()) {
-                        Log.d(TAG, "Search returned " + articles.size() + " articles for query: " + query);
+                        Log.d(TAG, "Search returned " + articles.size() + " articles for query: " + query + ", page: " + page);
                         
-                        // Save to database with special search category
+                        // Add search category and metadata to articles
                         for (Article article : articles) {
                             article.setCategory("search_" + query);
                             article.setFeatured(false);
                             article.setTimestamp(System.currentTimeMillis());
                         }
                         
+                        // Save to database with special search category
                         saveArticlesToDb("search_" + query, articles, false);
                         
-                        // Return articles to caller
-                        mainHandler.post(() -> callback.onSuccess(articles));
+                        // Determine if there are more pages based on results count
+                        boolean hasMorePages = articles.size() >= ARTICLES_PER_PAGE;
+                        
+                        // Return articles to caller with pagination info
+                        mainHandler.post(() -> callback.onSuccessWithHasMore(articles, hasMorePages));
                     } else {
-                        Log.d(TAG, "Search returned empty list for query: " + query);
-                        mainHandler.post(() -> callback.onSuccess(new ArrayList<>()));
+                        Log.d(TAG, "Search returned empty list for query: " + query + ", page: " + page);
+                        mainHandler.post(() -> callback.onSuccessWithHasMore(new ArrayList<>(), false));
                     }
                 } else {
                     String errorMsg = "Failed to search articles";
+                    try {
+                        if (response.errorBody() != null) {
+                            errorMsg += ": " + response.errorBody().string();
+                        }
+                    } catch (IOException e) {
+                        Log.e(TAG, "Error reading error body", e);
+                    }
                     Log.e(TAG, errorMsg);
                     mainHandler.post(() -> callback.onError(errorMsg));
                 }
@@ -393,5 +446,103 @@ public class NewsRepository {
                 mainHandler.post(() -> callback.onError(errorMsg));
             }
         });
+    }
+    
+    /**
+     * Search for articles using the GNews API (simplified version for backward compatibility)
+     */
+    public void searchArticles(String query, NewsCallback callback) {
+        searchArticles(query, 1, new PaginatedNewsCallback() {
+            @Override
+            public void onSuccessWithHasMore(List<Article> articles, boolean hasMorePages) {
+                callback.onSuccess(articles);
+            }
+            
+            @Override
+            public void onSuccess(List<Article> articles) {
+                callback.onSuccess(articles);
+            }
+            
+            @Override
+            public void onError(String message) {
+                callback.onError(message);
+            }
+        });
+    }
+    
+    // Bookmark functionality
+    public void getBookmarkedArticles(NewsCallback callback) {
+        executor.execute(() -> {
+            try {
+                List<Article> bookmarkedArticles = database.articleDao().getBookmarkedArticles();
+                mainHandler.post(() -> callback.onSuccess(bookmarkedArticles));
+            } catch (Exception e) {
+                Log.e(TAG, "Error fetching bookmarked articles", e);
+                mainHandler.post(() -> callback.onError("Failed to load bookmarked articles"));
+            }
+        });
+    }
+    
+    public void bookmarkArticle(Article article, NewsCallback callback) {
+        executor.execute(() -> {
+            try {
+                // Check if we have all the article details needed
+                if (article.getTitle() == null || article.getTitle().isEmpty()) {
+                    // Fetch the article data from the database if it exists
+                    List<Article> existingArticles = database.articleDao().getArticlesByUrl(article.getUrl());
+                    
+                    if (existingArticles != null && !existingArticles.isEmpty()) {
+                        // Use the existing article data
+                        Article existingArticle = existingArticles.get(0);
+                        existingArticle.setBookmarked(true);
+                        database.articleDao().insertArticle(existingArticle);
+                    } else {
+                        // We don't have the article details, just set the URL and bookmark flag
+                        article.setBookmarked(true);
+                        if (article.getTimestamp() == 0) {
+                            article.setTimestamp(System.currentTimeMillis());
+                        }
+                        database.articleDao().insertArticle(article);
+                    }
+                } else {
+                    // We have full article details
+                    article.setBookmarked(true);
+                    database.articleDao().insertArticle(article);
+                }
+                
+                mainHandler.post(() -> callback.onSuccess(null));
+            } catch (Exception e) {
+                Log.e(TAG, "Error bookmarking article", e);
+                mainHandler.post(() -> callback.onError("Failed to bookmark article"));
+            }
+        });
+    }
+    
+    public void unbookmarkArticle(String articleUrl, NewsCallback callback) {
+        executor.execute(() -> {
+            try {
+                database.articleDao().unbookmarkArticle(articleUrl);
+                mainHandler.post(() -> callback.onSuccess(null));
+            } catch (Exception e) {
+                Log.e(TAG, "Error removing bookmark", e);
+                mainHandler.post(() -> callback.onError("Failed to remove bookmark"));
+            }
+        });
+    }
+    
+    public void isArticleBookmarked(String articleUrl, BookmarkStatusCallback callback) {
+        executor.execute(() -> {
+            try {
+                boolean isBookmarked = database.articleDao().isArticleBookmarked(articleUrl);
+                mainHandler.post(() -> callback.onResult(isBookmarked));
+            } catch (Exception e) {
+                Log.e(TAG, "Error checking bookmark status", e);
+                mainHandler.post(() -> callback.onResult(false));
+            }
+        });
+    }
+    
+    public interface BookmarkStatusCallback {
+        void onResult(boolean isBookmarked);
     }
 } 

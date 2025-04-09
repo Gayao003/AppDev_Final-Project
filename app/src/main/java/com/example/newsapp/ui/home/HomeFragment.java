@@ -15,6 +15,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.example.newsapp.R;
 import com.example.newsapp.data.models.Article;
 import com.example.newsapp.data.repository.NewsRepository;
+import com.example.newsapp.data.repository.BookmarkSyncRepository;
 import com.google.android.material.snackbar.Snackbar;
 
 import java.util.ArrayList;
@@ -22,6 +23,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 import java.util.LinkedHashSet;
+import java.util.HashSet;
 
 public class HomeFragment extends Fragment {
     private static final String TAG = "HomeFragment";
@@ -45,6 +47,7 @@ public class HomeFragment extends Fragment {
     private String currentCategory = "technology";
     
     private NewsRepository newsRepository;
+    private BookmarkSyncRepository bookmarkSyncRepository;
     private View rootView;
     
     // Pagination variables
@@ -63,8 +66,9 @@ public class HomeFragment extends Fragment {
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         rootView = inflater.inflate(R.layout.fragment_home, container, false);
         
-        // Initialize repository
+        // Initialize repositories
         newsRepository = new NewsRepository(requireContext());
+        bookmarkSyncRepository = new BookmarkSyncRepository(requireContext());
         
         setupViews(rootView);
         setupCategoriesRecyclerView();
@@ -155,91 +159,91 @@ public class HomeFragment extends Fragment {
                 @Override
                 public void onSuccessWithHasMore(List<Article> articles, boolean morePages) {
                     if (isAdded()) {
-                        Log.d(TAG, "Page " + page + " loaded with " + articles.size() + " articles");
+                        Log.d(TAG, "Page " + page + " loaded with " + articles.size() + " articles, hasMore=" + morePages);
                         
                         // Update UI with the new articles
+                        cancelLoadingTimeout();
+                        isLoadingMore = false;
+                        paginationLoadingIndicator.setVisibility(View.GONE);
+                        
                         if (articles.isEmpty()) {
-                            handleNoNewArticles(morePages);
+                            // No articles in this page
+                            if (morePages) {
+                                // API says there are more pages, so show the load more button
+                                loadMoreButton.setVisibility(View.VISIBLE);
+                                Log.d(TAG, "No articles in this page but API indicates more pages exist");
+                                showOfflineMessage("No new articles found. You can try loading more.");
+                            } else {
+                                // No more pages according to API
+                                loadMoreButton.setVisibility(View.GONE);
+                                hasMorePages = false;
+                                Log.d(TAG, "No more articles available according to API");
+                                showOfflineMessage("No more articles available.");
+                            }
                         } else {
+                            // We got some articles, add them to the adapter
                             // Get existing articles
                             List<Article> existingArticles = newsAdapter.getArticles();
                             Log.d(TAG, "Current articles: " + existingArticles.size());
                             
-                            // Filter out any duplicates using a Set
-                            Set<Article> combinedSet = new LinkedHashSet<>(existingArticles);
-                            int beforeSize = combinedSet.size();
-                            combinedSet.addAll(articles);
-                            int afterSize = combinedSet.size();
+                            // Create a new list combining existing and new articles
+                            List<Article> combinedArticles = new ArrayList<>(existingArticles);
                             
-                            // Convert back to a List
-                            List<Article> combinedArticles = new ArrayList<>(combinedSet);
+                            // Add only articles that don't already exist (by URL)
+                            Set<String> existingUrls = new HashSet<>();
+                            for (Article article : existingArticles) {
+                                if (article.getUrl() != null) {
+                                    existingUrls.add(article.getUrl());
+                                }
+                            }
                             
-                            Log.d(TAG, "Adding " + articles.size() + " articles, new unique articles: " + (afterSize - beforeSize));
+                            int newArticlesAdded = 0;
+                            for (Article article : articles) {
+                                if (article.getUrl() != null && !existingUrls.contains(article.getUrl())) {
+                                    combinedArticles.add(article);
+                                    existingUrls.add(article.getUrl());
+                                    newArticlesAdded++;
+                                }
+                            }
                             
-                            // Only update if we actually have new articles
-                            if (afterSize > beforeSize) {
-                                // Got new articles - update the UI
-                                cancelLoadingTimeout();
-                                isLoadingMore = false;
-                                paginationLoadingIndicator.setVisibility(View.GONE);
-                                
-                                // Update adapter with combined list
-                                newsAdapter.updateArticles(combinedArticles);
-                                
-                                // Update pagination state
-                                hasMorePages = morePages;
-                                Log.d(TAG, "Setting hasMorePages to " + hasMorePages);
-                                
-                                // Show load more button if there are more pages
-                                loadMoreButton.setVisibility(hasMorePages ? View.VISIBLE : View.GONE);
-                                
+                            Log.d(TAG, "Adding " + newArticlesAdded + " new unique articles out of " + articles.size() + " received");
+                            
+                            // Update adapter with combined list
+                            newsAdapter.updateArticles(combinedArticles);
+                            
+                            // Update pagination state
+                            hasMorePages = morePages;
+                            Log.d(TAG, "Setting hasMorePages to " + hasMorePages);
+                            
+                            // Show load more button if there are more pages
+                            loadMoreButton.setVisibility(hasMorePages ? View.VISIBLE : View.GONE);
+                            
+                            if (newArticlesAdded > 0) {
                                 // Scroll to show new content
                                 scrollView.post(() -> {
-                                    // Calculate position to scroll to - a few items back from the end
-                                    int scrollPosition = Math.max(0, newsAdapter.getItemCount() - 5);
+                                    // Calculate position to scroll to - a few items back from where new content begins
+                                    int scrollPosition = Math.max(0, existingArticles.size() - 1);
                                     if (scrollPosition < newsAdapter.getItemCount()) {
                                         newsRecyclerView.smoothScrollToPosition(scrollPosition);
                                     }
                                 });
-                            } else {
-                                // No new articles - try another page if possible
-                                handleNoNewArticles(morePages);
+                            } else if (morePages) {
+                                // No new articles added but API says there are more pages
+                                // Let's try loading the next page automatically
+                                if (retryCount < MAX_RETRY_PAGES) {
+                                    retryCount++;
+                                    currentPage++;
+                                    Log.d(TAG, "No new articles added, automatically trying page " + currentPage);
+                                    tryLoadPage(currentPage);
+                                } else {
+                                    // Too many retries, just show the load more button
+                                    showOfflineMessage("Try loading more for additional articles.");
+                                }
                             }
                         }
                     }
                 }
             });
-    }
-    
-    private void handleNoNewArticles(boolean morePages) {
-        // If we haven't exceeded our retry limit and there are more pages, try the next page
-        if (retryCount < MAX_RETRY_PAGES && morePages) {
-            retryCount++;
-            currentPage++;
-            Log.d(TAG, "No new articles found, trying page " + currentPage + " (attempt " + retryCount + ")");
-            tryLoadPage(currentPage);
-        } else {
-            // We've tried enough pages or there are no more pages
-            cancelLoadingTimeout();
-            isLoadingMore = false;
-            paginationLoadingIndicator.setVisibility(View.GONE);
-            
-            if (retryCount >= MAX_RETRY_PAGES) {
-                // We tried multiple pages but couldn't find new articles
-                Log.d(TAG, "No new articles found after " + retryCount + " attempts");
-                
-                // Still show load more button so user can try again manually
-                hasMorePages = true;
-                loadMoreButton.setVisibility(View.VISIBLE);
-            } else {
-                // API says no more pages
-                Log.d(TAG, "No more pages available from API");
-                
-                // No more pages
-                hasMorePages = false;
-                loadMoreButton.setVisibility(View.GONE);
-            }
-        }
     }
     
     private void loadNewsForCategory(String category) {
@@ -497,15 +501,16 @@ public class HomeFragment extends Fragment {
     }
 
     private void setupFeaturedRecyclerView() {
-        featuredRecyclerView.setLayoutManager(
-            new LinearLayoutManager(getContext(), LinearLayoutManager.HORIZONTAL, false));
-        featuredAdapter = new NewsAdapter(new ArrayList<>(), true);
+        List<Article> emptyList = new ArrayList<>();
+        featuredAdapter = new NewsAdapter(emptyList, true, bookmarkSyncRepository);
+        featuredRecyclerView.setLayoutManager(new LinearLayoutManager(requireContext(), LinearLayoutManager.HORIZONTAL, false));
         featuredRecyclerView.setAdapter(featuredAdapter);
     }
 
     private void setupNewsRecyclerView() {
-        newsRecyclerView.setLayoutManager(new LinearLayoutManager(getContext()));
-        newsAdapter = new NewsAdapter(new ArrayList<>(), false);
+        List<Article> emptyList = new ArrayList<>();
+        newsAdapter = new NewsAdapter(emptyList, false, bookmarkSyncRepository);
+        newsRecyclerView.setLayoutManager(new LinearLayoutManager(requireContext()));
         newsRecyclerView.setAdapter(newsAdapter);
     }
     

@@ -32,4 +32,23 @@ public interface ArticleDao {
         // Insert new articles
         insertArticles(articles);
     }
+    
+    // Methods for bookmarks functionality
+    @Query("UPDATE articles SET isBookmarked = 1 WHERE url = :articleUrl")
+    void bookmarkArticle(String articleUrl);
+    
+    @Query("UPDATE articles SET isBookmarked = 0 WHERE url = :articleUrl")
+    void unbookmarkArticle(String articleUrl);
+    
+    @Query("SELECT * FROM articles WHERE isBookmarked = 1 ORDER BY timestamp DESC")
+    List<Article> getBookmarkedArticles();
+    
+    @Query("SELECT isBookmarked FROM articles WHERE url = :articleUrl")
+    boolean isArticleBookmarked(String articleUrl);
+    
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    void insertArticle(Article article);
+    
+    @Query("SELECT * FROM articles WHERE url = :url")
+    List<Article> getArticlesByUrl(String url);
 } 

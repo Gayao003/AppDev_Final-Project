@@ -27,7 +27,7 @@
             android:layout_centerVertical="true"
             android:layout_marginStart="8dp"
             android:layout_marginEnd="8dp"
-            android:layout_toStartOf="@id/bookmark_button"
+            android:layout_toStartOf="@id/remove_bookmark_button"
             android:layout_toEndOf="@id/news_image"
             android:orientation="vertical"
             android:padding="8dp">
@@ -54,16 +54,16 @@
         </LinearLayout>
 
         <ImageButton
-            android:id="@+id/bookmark_button"
+            android:id="@+id/remove_bookmark_button"
             android:layout_width="40dp"
             android:layout_height="40dp"
             android:layout_alignParentEnd="true"
             android:layout_centerVertical="true"
             android:layout_marginEnd="8dp"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="Bookmark article"
+            android:contentDescription="Remove bookmark"
             android:padding="8dp"
-            android:src="@drawable/ic_bookmark_border"
+            android:src="@drawable/ic_bookmark_filled"
             app:tint="@color/primary_color" />
     </RelativeLayout>
-</androidx.cardview.widget.CardView>
+</androidx.cardview.widget.CardView> 
