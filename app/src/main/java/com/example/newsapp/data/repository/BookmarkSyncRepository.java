@@ -3,6 +3,8 @@ package com.example.newsapp.data.repository;
 import android.content.Context;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.Log;
 
 import com.example.newsapp.data.db.NewsDatabase;
@@ -35,6 +37,7 @@ public class BookmarkSyncRepository {
     private final FirebaseAuth auth;
     private final Context context;
     private final Executor executor = Executors.newSingleThreadExecutor();
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
     public BookmarkSyncRepository(Context context) {
         this.context = context;
@@ -62,13 +65,17 @@ public class BookmarkSyncRepository {
                 } else {
                     // Success but no cloud sync
                     if (callback != null) {
-                        callback.onSuccess(false);
+                        mainHandler.post(() -> {
+                            callback.onSuccess(false);
+                        });
                     }
                 }
             } catch (Exception e) {
                 Log.e(TAG, "Error adding bookmark locally", e);
                 if (callback != null) {
-                    callback.onError("Failed to bookmark article: " + e.getMessage());
+                    mainHandler.post(() -> {
+                        callback.onError("Failed to bookmark article: " + e.getMessage());
+                    });
                 }
             }
         });
@@ -89,13 +96,17 @@ public class BookmarkSyncRepository {
                 } else {
                     // Success but no cloud sync
                     if (callback != null) {
-                        callback.onSuccess(false);
+                        mainHandler.post(() -> {
+                            callback.onSuccess(false);
+                        });
                     }
                 }
             } catch (Exception e) {
                 Log.e(TAG, "Error removing bookmark locally", e);
                 if (callback != null) {
-                    callback.onError("Failed to remove bookmark: " + e.getMessage());
+                    mainHandler.post(() -> {
+                        callback.onError("Failed to remove bookmark: " + e.getMessage());
+                    });
                 }
             }
         });
@@ -110,19 +121,45 @@ public class BookmarkSyncRepository {
                 // First get local bookmarks
                 List<Article> localBookmarks = database.articleDao().getBookmarkedArticles();
                 
-                // Return local bookmarks immediately
+                Log.d(TAG, "Local bookmarks loaded: " + (localBookmarks != null ? localBookmarks.size() : 0));
+                
+                // Return local bookmarks immediately on the main thread
                 if (callback != null) {
-                    callback.onArticlesLoaded(localBookmarks, false);
+                    mainHandler.post(() -> {
+                        callback.onArticlesLoaded(localBookmarks, false);
+                    });
                 }
                 
                 // Then try to sync with Firestore if online and logged in
                 if (isUserSignedIn() && isNetworkAvailable()) {
                     syncBookmarksFromFirestore(callback);
+                } else {
+                    Log.d(TAG, "Not syncing with Firestore: " + 
+                          (isUserSignedIn() ? "User signed in" : "User not signed in") + ", " +
+                          (isNetworkAvailable() ? "Network available" : "Network not available"));
                 }
             } catch (Exception e) {
                 Log.e(TAG, "Error getting local bookmarks", e);
+                
+                // Try to get bookmarks directly from Room as a fallback
+                try {
+                    List<Article> fallbackBookmarks = database.articleDao().getBookmarkedArticles();
+                    if (fallbackBookmarks != null && !fallbackBookmarks.isEmpty() && callback != null) {
+                        final List<Article> finalBookmarks = new ArrayList<>(fallbackBookmarks);
+                        Log.d(TAG, "Fallback bookmarks loaded: " + finalBookmarks.size());
+                        mainHandler.post(() -> {
+                            callback.onArticlesLoaded(finalBookmarks, false);
+                        });
+                        return;
+                    }
+                } catch (Exception fallbackEx) {
+                    Log.e(TAG, "Fallback bookmark loading also failed", fallbackEx);
+                }
+                
                 if (callback != null) {
-                    callback.onError("Failed to get bookmarks: " + e.getMessage());
+                    mainHandler.post(() -> {
+                        callback.onError("Failed to get bookmarks: " + e.getMessage());
+                    });
                 }
             }
         });
@@ -136,12 +173,16 @@ public class BookmarkSyncRepository {
             try {
                 boolean isBookmarked = database.articleDao().isArticleBookmarked(articleUrl);
                 if (callback != null) {
-                    callback.onResult(isBookmarked);
+                    mainHandler.post(() -> {
+                        callback.onResult(isBookmarked);
+                    });
                 }
             } catch (Exception e) {
                 Log.e(TAG, "Error checking bookmark status", e);
                 if (callback != null) {
-                    callback.onResult(false);
+                    mainHandler.post(() -> {
+                        callback.onResult(false);
+                    });
                 }
             }
         });
@@ -153,14 +194,28 @@ public class BookmarkSyncRepository {
     public void syncBookmarksOnLogin(SyncCallback callback) {
         if (isUserSignedIn() && isNetworkAvailable()) {
             executor.execute(() -> {
-                // First get local bookmarks
-                List<Article> localBookmarks = database.articleDao().getBookmarkedArticles();
-                
-                // Upload all local bookmarks that aren't already in Firestore
-                uploadLocalBookmarksToFirestore(localBookmarks);
-                
-                // Then get bookmarks from Firestore and merge with local
-                syncBookmarksFromFirestore(callback);
+                try {
+                    // First get local bookmarks
+                    List<Article> localBookmarks = database.articleDao().getBookmarkedArticles();
+                    
+                    // Upload all local bookmarks that aren't already in Firestore
+                    uploadLocalBookmarksToFirestore(localBookmarks);
+                    
+                    // Then get bookmarks from Firestore and merge with local
+                    syncBookmarksFromFirestore(callback);
+                } catch (Exception e) {
+                    Log.e(TAG, "Error syncing bookmarks on login", e);
+                    if (callback != null) {
+                        mainHandler.post(() -> {
+                            callback.onError("Failed to sync bookmarks: " + e.getMessage());
+                        });
+                    }
+                }
+            });
+        } else if (callback != null) {
+            // If not signed in or offline, notify the callback
+            mainHandler.post(() -> {
+                callback.onError("Cannot sync: User not signed in or offline");
             });
         }
     }
@@ -198,7 +253,9 @@ public class BookmarkSyncRepository {
         String userId = getCurrentUserId();
         if (userId == null) {
             if (callback != null) {
-                callback.onSuccess(false);
+                mainHandler.post(() -> {
+                    callback.onSuccess(false);
+                });
             }
             return;
         }
@@ -234,20 +291,26 @@ public class BookmarkSyncRepository {
                             .set(bookmarkData)
                             .addOnSuccessListener(aVoid1 -> {
                                 if (callback != null) {
-                                    callback.onSuccess(true);
+                                    mainHandler.post(() -> {
+                                        callback.onSuccess(true);
+                                    });
                                 }
                             })
                             .addOnFailureListener(e -> {
                                 Log.e(TAG, "Failed to add bookmark to Firestore", e);
                                 if (callback != null) {
-                                    callback.onSuccess(false);
+                                    mainHandler.post(() -> {
+                                        callback.onSuccess(false);
+                                    });
                                 }
                             });
                 })
                 .addOnFailureListener(e -> {
                     Log.e(TAG, "Failed to save article to Firestore", e);
                     if (callback != null) {
-                        callback.onSuccess(false);
+                        mainHandler.post(() -> {
+                            callback.onSuccess(false);
+                        });
                     }
                 });
     }
@@ -256,7 +319,9 @@ public class BookmarkSyncRepository {
         String userId = getCurrentUserId();
         if (userId == null) {
             if (callback != null) {
-                callback.onSuccess(false);
+                mainHandler.post(() -> {
+                    callback.onSuccess(false);
+                });
             }
             return;
         }
@@ -270,13 +335,17 @@ public class BookmarkSyncRepository {
                 .delete()
                 .addOnSuccessListener(aVoid -> {
                     if (callback != null) {
-                        callback.onSuccess(true);
+                        mainHandler.post(() -> {
+                            callback.onSuccess(true);
+                        });
                     }
                 })
                 .addOnFailureListener(e -> {
                     Log.e(TAG, "Failed to remove bookmark from Firestore", e);
                     if (callback != null) {
-                        callback.onSuccess(false);
+                        mainHandler.post(() -> {
+                            callback.onSuccess(false);
+                        });
                     }
                 });
     }
@@ -309,7 +378,9 @@ public class BookmarkSyncRepository {
                     } else {
                         Log.e(TAG, "Error getting bookmarks from Firestore", task.getException());
                         if (callback != null) {
-                            callback.onError("Failed to sync bookmarks: " + task.getException().getMessage());
+                            mainHandler.post(() -> {
+                                callback.onError("Failed to sync bookmarks: " + task.getException().getMessage());
+                            });
                         }
                     }
                 });
@@ -318,7 +389,9 @@ public class BookmarkSyncRepository {
     private void fetchArticlesFromFirestore(List<String> articleUrls, SyncCallback callback) {
         if (articleUrls.isEmpty()) {
             if (callback != null) {
-                callback.onArticlesLoaded(new ArrayList<>(), true);
+                mainHandler.post(() -> {
+                    callback.onArticlesLoaded(new ArrayList<>(), true);
+                });
             }
             return;
         }
@@ -354,7 +427,11 @@ public class BookmarkSyncRepository {
                         if (completed[0] == articleUrls.size()) {
                             // Return articles to caller
                             if (callback != null) {
-                                callback.onArticlesLoaded(articles, true);
+                                // Make a final copy for the lambda
+                                final List<Article> finalArticles = new ArrayList<>(articles);
+                                mainHandler.post(() -> {
+                                    callback.onArticlesLoaded(finalArticles, true);
+                                });
                             }
                         }
                     });

@@ -10,6 +10,7 @@ import android.widget.ImageView;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentActivity;
 import androidx.recyclerview.widget.RecyclerView;
 
@@ -22,6 +23,7 @@ import com.bumptech.glide.request.RequestOptions;
 import com.example.newsapp.R;
 import com.example.newsapp.data.models.Article;
 import com.example.newsapp.ui.article.ArticleDetailFragment;
+import com.example.newsapp.utils.OfflineArticleManager;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -30,6 +32,7 @@ public class BookmarksAdapter extends RecyclerView.Adapter<BookmarksAdapter.Book
     private static final String TAG = "BookmarksAdapter";
     private List<Article> articles;
     private final BookmarkActionListener actionListener;
+    private final OfflineArticleManager offlineArticleManager;
     
     public interface BookmarkActionListener {
         void onRemoveBookmark(Article article);
@@ -38,6 +41,9 @@ public class BookmarksAdapter extends RecyclerView.Adapter<BookmarksAdapter.Book
     public BookmarksAdapter(List<Article> articles, BookmarkActionListener actionListener) {
         this.articles = new ArrayList<>(articles);
         this.actionListener = actionListener;
+        this.offlineArticleManager = new OfflineArticleManager(
+            actionListener instanceof Fragment ? 
+            ((Fragment) actionListener).requireContext() : null);
     }
     
     public void updateArticles(List<Article> newArticles) {
@@ -76,12 +82,14 @@ public class BookmarksAdapter extends RecyclerView.Adapter<BookmarksAdapter.Book
         TextView title, description;
         ImageView imageView;
         ImageButton removeButton;
+        TextView offlineAvailableIndicator;
         
         public BookmarkViewHolder(@NonNull View itemView) {
             super(itemView);
             title = itemView.findViewById(R.id.news_title);
             description = itemView.findViewById(R.id.news_description);
             imageView = itemView.findViewById(R.id.news_image);
+            offlineAvailableIndicator = itemView.findViewById(R.id.offline_available_indicator);
             
             // Add the remove bookmark button if it exists
             removeButton = itemView.findViewById(R.id.remove_bookmark_button);
@@ -101,6 +109,16 @@ public class BookmarksAdapter extends RecyclerView.Adapter<BookmarksAdapter.Book
             
             // Load image with proper error handling
             loadImage(article.getUrlToImage(), imageView);
+            
+            // Check if article is available offline
+            if (offlineAvailableIndicator != null) {
+                if (offlineArticleManager.isArticleAvailableOffline(article.getUrl())) {
+                    offlineAvailableIndicator.setVisibility(View.VISIBLE);
+                    offlineAvailableIndicator.setText("Available offline");
+                } else {
+                    offlineAvailableIndicator.setVisibility(View.GONE);
+                }
+            }
             
             // Set up remove button if available
             if (removeButton != null) {

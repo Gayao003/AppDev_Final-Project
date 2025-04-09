@@ -1,5 +1,11 @@
 package com.example.newsapp.ui.bookmarks;
 
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.LayoutInflater;
@@ -30,16 +36,22 @@ public class BookmarksFragment extends Fragment implements BookmarksAdapter.Book
     private LinearLayout emptyState;
     private SwipeRefreshLayout swipeRefreshLayout;
     private TextView syncStatusText;
+    private TextView offlineIndicator;
+    private boolean isOfflineMode = false;
     
     private BookmarksAdapter adapter;
     private BookmarkSyncRepository bookmarkSyncRepository;
     private List<Article> bookmarkedArticles = new ArrayList<>();
+    private NetworkChangeReceiver networkChangeReceiver;
     
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         // Initialize the repository
         bookmarkSyncRepository = new BookmarkSyncRepository(requireContext());
+        
+        // Initialize network change receiver
+        networkChangeReceiver = new NetworkChangeReceiver();
     }
 
     @Override
@@ -53,12 +65,16 @@ public class BookmarksFragment extends Fragment implements BookmarksAdapter.Book
         emptyState = rootView.findViewById(R.id.empty_state);
         swipeRefreshLayout = rootView.findViewById(R.id.swipe_refresh_layout);
         syncStatusText = rootView.findViewById(R.id.sync_status_text);
+        offlineIndicator = rootView.findViewById(R.id.offline_indicator);
         
         // Setup RecyclerView
         setupRecyclerView();
         
         // Setup SwipeRefreshLayout
         setupSwipeRefresh();
+        
+        // Check network status and set offline indicator
+        checkNetworkStatus();
         
         // Load bookmarked articles
         loadBookmarkedArticles();
@@ -69,8 +85,29 @@ public class BookmarksFragment extends Fragment implements BookmarksAdapter.Book
     @Override
     public void onResume() {
         super.onResume();
+        // Register network change receiver
+        requireActivity().registerReceiver(
+            networkChangeReceiver, 
+            new IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION)
+        );
+        
+        // Check network status
+        checkNetworkStatus();
+        
         // Refresh bookmarks when coming back to the fragment
         loadBookmarkedArticles();
+    }
+    
+    @Override
+    public void onPause() {
+        super.onPause();
+        // Unregister network change receiver
+        try {
+            requireActivity().unregisterReceiver(networkChangeReceiver);
+        } catch (IllegalArgumentException e) {
+            // Receiver was not registered
+            Log.e(TAG, "NetworkChangeReceiver not registered or already unregistered", e);
+        }
     }
     
     private void setupRecyclerView() {
@@ -101,8 +138,16 @@ public class BookmarksFragment extends Fragment implements BookmarksAdapter.Book
                     
                     // Update sync status
                     updateSyncStatus(fromCloud);
-                } else if (!fromCloud) {
-                    // Only show empty state if we've loaded local data and it's empty
+                } else {
+                    // Show empty state with appropriate message
+                    TextView emptyStateText = emptyState.findViewById(R.id.empty_state_text);
+                    if (emptyStateText != null) {
+                        if (isOfflineMode) {
+                            emptyStateText.setText("No bookmarks available offline. Connect to the internet to sync your bookmarks.");
+                        } else {
+                            emptyStateText.setText("You haven't bookmarked any articles yet.");
+                        }
+                    }
                     showEmptyState(true);
                 }
             }
@@ -116,15 +161,30 @@ public class BookmarksFragment extends Fragment implements BookmarksAdapter.Book
                 
                 // Only show empty state if we have no articles
                 if (bookmarkedArticles.isEmpty()) {
+                    // Update empty state message for offline mode
+                    TextView emptyStateText = emptyState.findViewById(R.id.empty_state_text);
+                    if (emptyStateText != null && isOfflineMode) {
+                        emptyStateText.setText("Unable to load bookmarks in offline mode. Connect to the internet to sync your bookmarks.");
+                    }
                     showEmptyState(true);
                 }
                 
-                showError("Failed to load bookmarks: " + message);
+                if (isOfflineMode) {
+                    showError("Offline mode: Using locally cached bookmarks");
+                } else {
+                    showError("Failed to load bookmarks: " + message);
+                }
             }
         });
     }
     
     private void syncBookmarks() {
+        if (isOfflineMode) {
+            swipeRefreshLayout.setRefreshing(false);
+            showError("Cannot sync in offline mode. Please check your connection.");
+            return;
+        }
+        
         syncStatusText.setText("Syncing bookmarks...");
         syncStatusText.setVisibility(View.VISIBLE);
         
@@ -246,6 +306,56 @@ public class BookmarksFragment extends Fragment implements BookmarksAdapter.Book
     private void showSuccess(String message) {
         if (getView() != null) {
             Snackbar.make(getView(), message, Snackbar.LENGTH_SHORT).show();
+        }
+    }
+    
+    private void checkNetworkStatus() {
+        isOfflineMode = !isNetworkAvailable();
+        updateOfflineIndicator();
+    }
+    
+    private boolean isNetworkAvailable() {
+        ConnectivityManager connectivityManager = (ConnectivityManager) requireContext().getSystemService(Context.CONNECTIVITY_SERVICE);
+        if (connectivityManager != null) {
+            NetworkInfo activeNetworkInfo = connectivityManager.getActiveNetworkInfo();
+            return activeNetworkInfo != null && activeNetworkInfo.isConnected();
+        }
+        return false;
+    }
+    
+    private void updateOfflineIndicator() {
+        if (offlineIndicator != null) {
+            if (isOfflineMode) {
+                offlineIndicator.setVisibility(View.VISIBLE);
+                offlineIndicator.setText("Offline Mode");
+            } else {
+                offlineIndicator.setVisibility(View.GONE);
+            }
+        }
+    }
+    
+    /**
+     * BroadcastReceiver to listen for network connectivity changes
+     */
+    private class NetworkChangeReceiver extends BroadcastReceiver {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (intent.getAction() != null && 
+                intent.getAction().equals(ConnectivityManager.CONNECTIVITY_ACTION)) {
+                
+                boolean previousOfflineMode = isOfflineMode;
+                checkNetworkStatus();
+                
+                // If network state changed, update UI accordingly
+                if (previousOfflineMode != isOfflineMode) {
+                    if (isOfflineMode) {
+                        showError("You are offline. Using locally cached bookmarks.");
+                    } else {
+                        showSuccess("You are back online. Syncing bookmarks...");
+                        syncBookmarks();
+                    }
+                }
+            }
         }
     }
 }

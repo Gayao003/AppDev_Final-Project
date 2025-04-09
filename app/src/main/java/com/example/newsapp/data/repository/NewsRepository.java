@@ -177,15 +177,30 @@ public class NewsRepository {
                         callback.onSuccessWithHasMore(new ArrayList<>(), false);
                     }
                 } else {
-                    String errorMsg = "Failed to load more articles";
+                    // Create the final error message before using it in lambda
+                    String baseErrorMsg = "Failed to load more articles";
+                    String errorDetails = null;
+                    
+                    // First try to get error details
                     if (response.errorBody() != null) {
                         try {
-                            errorMsg += ": " + response.errorBody().string();
+                            errorDetails = response.errorBody().string();
                         } catch (IOException e) {
                             Log.e(TAG, "Error reading error body", e);
+                            // Just log, don't assign
                         }
                     }
-                    callback.onError(errorMsg);
+                    
+                    // Now create the final error message
+                    final String displayErrorMsg;
+                    if (errorDetails != null && !errorDetails.isEmpty()) {
+                        displayErrorMsg = baseErrorMsg + ": " + errorDetails;
+                    } else {
+                        displayErrorMsg = baseErrorMsg;
+                    }
+                    
+                    Log.e(TAG, displayErrorMsg);
+                    callback.onError(displayErrorMsg);
                 }
             }
             
@@ -239,7 +254,10 @@ public class NewsRepository {
                     public void onFailure(Call<NewsResponse> call, Throwable t) {
                         String errorMsg = "Network failure: " + t.getMessage() + " for " + category;
                         Log.e(TAG, errorMsg, t);
-                        mainHandler.post(() -> callback.onError("Network error: " + t.getMessage()));
+                        
+                        // Using final local variable for lambda
+                        final String displayErrorMsg = "Network error: " + t.getMessage();
+                        mainHandler.post(() -> callback.onError(displayErrorMsg));
                     }
                 });
             }
@@ -321,17 +339,19 @@ public class NewsRepository {
                 errorBody = "Error reading error body: " + e.getMessage();
             }
             
-            String errorMsg = "API error: HTTP " + errorCode + " for " + category;
-            Log.e(TAG, errorMsg + ", Body: " + errorBody);
+            // Create a log message for debugging
+            String logErrorMsg = "API error: HTTP " + errorCode + " for " + category;
+            Log.e(TAG, logErrorMsg + ", Body: " + errorBody);
             
-            final String finalErrorMsg;
+            // Create the final error message to show to the user
+            final String displayErrorMsg;
             if (errorCode == 429) {
-                finalErrorMsg = "API request limit reached. Using cached data.";
+                displayErrorMsg = "API request limit reached. Using cached data.";
             } else {
-                finalErrorMsg = "Error: " + errorCode + ". Check logs for details.";
+                displayErrorMsg = "Error: " + errorCode + ". Check logs for details.";
             }
             
-            mainHandler.post(() -> callback.onError(finalErrorMsg));
+            mainHandler.post(() -> callback.onError(displayErrorMsg));
         }
     }
     
@@ -426,16 +446,30 @@ public class NewsRepository {
                         mainHandler.post(() -> callback.onSuccessWithHasMore(new ArrayList<>(), false));
                     }
                 } else {
-                    String errorMsg = "Failed to search articles";
-                    try {
-                        if (response.errorBody() != null) {
-                            errorMsg += ": " + response.errorBody().string();
+                    // Create the final error message before using it in lambda
+                    String baseErrorMsg = "Failed to search articles";
+                    String errorDetails = null;
+                    
+                    // First try to get error details
+                    if (response.errorBody() != null) {
+                        try {
+                            errorDetails = response.errorBody().string();
+                        } catch (IOException e) {
+                            Log.e(TAG, "Error reading error body", e);
+                            // Just log, don't assign
                         }
-                    } catch (IOException e) {
-                        Log.e(TAG, "Error reading error body", e);
                     }
-                    Log.e(TAG, errorMsg);
-                    mainHandler.post(() -> callback.onError(errorMsg));
+                    
+                    // Now create the final error message
+                    final String displayErrorMsg;
+                    if (errorDetails != null && !errorDetails.isEmpty()) {
+                        displayErrorMsg = baseErrorMsg + ": " + errorDetails;
+                    } else {
+                        displayErrorMsg = baseErrorMsg;
+                    }
+                    
+                    Log.e(TAG, displayErrorMsg);
+                    mainHandler.post(() -> callback.onError(displayErrorMsg));
                 }
             }
             
