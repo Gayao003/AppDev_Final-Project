@@ -5,12 +5,14 @@ import android.os.AsyncTask;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
+import android.webkit.WebViewClient;
 
 import com.example.newsapp.api.GNewsApiService;
 import com.example.newsapp.api.RetrofitClient;
 import com.example.newsapp.data.db.NewsDatabase;
 import com.example.newsapp.data.models.Article;
 import com.example.newsapp.data.models.NewsResponse;
+import com.example.newsapp.utils.OfflineArticleManager;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -44,9 +46,12 @@ public class NewsRepository {
     // Keep track of total articles retrieved to avoid duplicates
     private int articlesOffset = 0;
     
+    private final OfflineArticleManager offlineManager;
+    
     public NewsRepository(Context context) {
         database = NewsDatabase.getInstance(context);
         apiService = RetrofitClient.getRetrofitInstance().create(GNewsApiService.class);
+        offlineManager = new OfflineArticleManager(context);
     }
     
     public interface NewsCallback {
@@ -578,5 +583,138 @@ public class NewsRepository {
     
     public interface BookmarkStatusCallback {
         void onResult(boolean isBookmarked);
+    }
+    
+    // Offline functionality
+    
+    /**
+     * Download an article for offline reading
+     * @param article The article to download
+     * @param callback Callback for download result
+     */
+    public void downloadArticleForOffline(Article article, OfflineDownloadCallback callback) {
+        // First ensure it's bookmarked
+        bookmarkArticle(article, new NewsCallback() {
+            @Override
+            public void onSuccess(List<Article> articles) {
+                offlineManager.downloadArticleForOffline(article, success -> {
+                    if (success) {
+                        Log.d(TAG, "Article downloaded successfully: " + article.getUrl());
+                        // Update the article object
+                        article.setDownloadedForOffline(true);
+                    } else {
+                        Log.e(TAG, "Failed to download article: " + article.getUrl());
+                    }
+                    mainHandler.post(() -> callback.onDownloadComplete(success));
+                });
+            }
+            
+            @Override
+            public void onError(String message) {
+                Log.e(TAG, "Failed to bookmark article for download: " + message);
+                mainHandler.post(() -> callback.onDownloadComplete(false));
+            }
+        });
+    }
+    
+    /**
+     * Check if an article is available for offline reading
+     */
+    public void isArticleAvailableOffline(String articleUrl, OfflineStatusCallback callback) {
+        executor.execute(() -> {
+            boolean isDownloaded = false;
+            try {
+                // Check database first
+                isDownloaded = database.articleDao().isArticleDownloadedForOffline(articleUrl);
+                
+                // Verify if the file actually exists
+                boolean fileExists = offlineManager.isArticleAvailableOffline(articleUrl);
+                
+                // If there's a mismatch, update the database
+                if (isDownloaded && !fileExists) {
+                    database.articleDao().markArticleAsNotDownloaded(articleUrl);
+                    isDownloaded = false;
+                } else if (!isDownloaded && fileExists) {
+                    database.articleDao().markArticleAsDownloaded(articleUrl);
+                    isDownloaded = true;
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "Error checking offline status", e);
+            }
+            
+            final boolean finalStatus = isDownloaded;
+            mainHandler.post(() -> callback.onResult(finalStatus));
+        });
+    }
+    
+    /**
+     * Get all articles downloaded for offline reading
+     */
+    public void getDownloadedArticles(NewsCallback callback) {
+        executor.execute(() -> {
+            try {
+                List<Article> downloadedArticles = database.articleDao().getDownloadedArticles();
+                // Filter out any that don't actually have files
+                List<Article> verifiedArticles = new ArrayList<>();
+                
+                for (Article article : downloadedArticles) {
+                    if (offlineManager.isArticleAvailableOffline(article.getUrl())) {
+                        verifiedArticles.add(article);
+                    } else {
+                        // Fix database inconsistency
+                        database.articleDao().markArticleAsNotDownloaded(article.getUrl());
+                    }
+                }
+                
+                mainHandler.post(() -> callback.onSuccess(verifiedArticles));
+            } catch (Exception e) {
+                Log.e(TAG, "Error fetching downloaded articles", e);
+                mainHandler.post(() -> callback.onError("Failed to load downloaded articles"));
+            }
+        });
+    }
+    
+    /**
+     * Delete an article from offline storage
+     */
+    public void deleteOfflineArticle(String articleUrl, NewsCallback callback) {
+        executor.execute(() -> {
+            try {
+                offlineManager.deleteOfflineArticle(articleUrl);
+                mainHandler.post(() -> callback.onSuccess(null));
+            } catch (Exception e) {
+                Log.e(TAG, "Error deleting offline article", e);
+                mainHandler.post(() -> callback.onError("Failed to delete offline article"));
+            }
+        });
+    }
+    
+    /**
+     * Get offline article content
+     */
+    public String getOfflineArticleContent(String articleUrl) {
+        return offlineManager.getOfflineArticleContent(articleUrl);
+    }
+    
+    /**
+     * Get local file URL for offline article
+     */
+    public String getOfflineArticleUrl(String articleUrl) {
+        return offlineManager.getLocalFileUrl(articleUrl);
+    }
+    
+    /**
+     * Get the WebViewClient that supports offline mode
+     */
+    public WebViewClient getOfflineEnabledWebViewClient() {
+        return offlineManager.getOfflineEnabledWebViewClient();
+    }
+    
+    public interface OfflineStatusCallback {
+        void onResult(boolean isAvailableOffline);
+    }
+    
+    public interface OfflineDownloadCallback {
+        void onDownloadComplete(boolean success);
     }
 } 

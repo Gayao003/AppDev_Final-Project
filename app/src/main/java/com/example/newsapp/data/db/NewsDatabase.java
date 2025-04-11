@@ -8,7 +8,7 @@ import androidx.room.RoomDatabase;
 
 import com.example.newsapp.data.models.Article;
 
-@Database(entities = {Article.class}, version = 3, exportSchema = false)
+@Database(entities = {Article.class}, version = 4, exportSchema = false)
 public abstract class NewsDatabase extends RoomDatabase {
     
     private static final String DATABASE_NAME = "news_db";

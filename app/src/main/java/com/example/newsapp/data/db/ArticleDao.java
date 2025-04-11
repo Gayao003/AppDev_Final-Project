@@ -51,4 +51,17 @@ public interface ArticleDao {
     
     @Query("SELECT * FROM articles WHERE url = :url")
     List<Article> getArticlesByUrl(String url);
+    
+    // Methods for offline functionality
+    @Query("UPDATE articles SET isDownloadedForOffline = 1 WHERE url = :articleUrl")
+    void markArticleAsDownloaded(String articleUrl);
+    
+    @Query("UPDATE articles SET isDownloadedForOffline = 0 WHERE url = :articleUrl")
+    void markArticleAsNotDownloaded(String articleUrl);
+    
+    @Query("SELECT isDownloadedForOffline FROM articles WHERE url = :articleUrl")
+    boolean isArticleDownloadedForOffline(String articleUrl);
+    
+    @Query("SELECT * FROM articles WHERE isDownloadedForOffline = 1 ORDER BY timestamp DESC")
+    List<Article> getDownloadedArticles();
 } 

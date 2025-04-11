@@ -24,6 +24,7 @@ public class Article {
     private long timestamp;
     private String content;
     private boolean isBookmarked;
+    private boolean isDownloadedForOffline;
     
     @Ignore
     private Source source;
@@ -113,6 +114,14 @@ public class Article {
     
     public void setBookmarked(boolean bookmarked) {
         isBookmarked = bookmarked;
+    }
+    
+    public boolean isDownloadedForOffline() {
+        return isDownloadedForOffline;
+    }
+    
+    public void setDownloadedForOffline(boolean downloadedForOffline) {
+        isDownloadedForOffline = downloadedForOffline;
     }
     
     // Helper method for debugging

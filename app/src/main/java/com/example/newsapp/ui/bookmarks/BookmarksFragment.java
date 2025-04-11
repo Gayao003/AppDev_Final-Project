@@ -23,6 +23,7 @@ import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 import com.example.newsapp.R;
 import com.example.newsapp.data.models.Article;
 import com.example.newsapp.data.repository.BookmarkSyncRepository;
+import com.example.newsapp.data.repository.NewsRepository;
 import com.google.android.material.snackbar.Snackbar;
 
 import java.util.ArrayList;
@@ -41,14 +42,16 @@ public class BookmarksFragment extends Fragment implements BookmarksAdapter.Book
     
     private BookmarksAdapter adapter;
     private BookmarkSyncRepository bookmarkSyncRepository;
+    private NewsRepository newsRepository;
     private List<Article> bookmarkedArticles = new ArrayList<>();
     private NetworkChangeReceiver networkChangeReceiver;
     
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        // Initialize the repository
+        // Initialize the repositories
         bookmarkSyncRepository = new BookmarkSyncRepository(requireContext());
+        newsRepository = new NewsRepository(requireContext());
         
         // Initialize network change receiver
         networkChangeReceiver = new NetworkChangeReceiver();
@@ -111,7 +114,7 @@ public class BookmarksFragment extends Fragment implements BookmarksAdapter.Book
     }
     
     private void setupRecyclerView() {
-        adapter = new BookmarksAdapter(bookmarkedArticles, this);
+        adapter = new BookmarksAdapter(bookmarkedArticles, this, newsRepository);
         bookmarksRecyclerView.setLayoutManager(new LinearLayoutManager(requireContext()));
         bookmarksRecyclerView.setAdapter(adapter);
     }
@@ -257,49 +260,86 @@ public class BookmarksFragment extends Fragment implements BookmarksAdapter.Book
             @Override
             public void onError(String message) {
                 if (!isAdded()) return;
+                
                 showError("Failed to remove bookmark: " + message);
             }
         });
     }
     
-    private void updateSyncStatus(boolean fromCloud) {
-        if (fromCloud) {
-            syncStatusText.setText("Bookmarks synced from cloud");
-            syncStatusText.setVisibility(View.VISIBLE);
+    @Override
+    public void onDownloadArticle(Article article) {
+        showLoading(true);
+        
+        newsRepository.downloadArticleForOffline(article, success -> {
+            if (!isAdded()) return;
             
-            // Hide sync status after a delay
-            syncStatusText.postDelayed(() -> {
-                if (isAdded()) {
-                    syncStatusText.setVisibility(View.GONE);
-                }
-            }, 3000);
-        }
+            showLoading(false);
+            
+            if (success) {
+                showSuccess("Article downloaded for offline reading");
+                // Refresh the bookmarks list to update UI
+                adapter.notifyDataSetChanged();
+            } else {
+                showError("Failed to download article");
+            }
+        });
+    }
+    
+    @Override
+    public void onDeleteOfflineArticle(Article article) {
+        showLoading(true);
+        
+        newsRepository.deleteOfflineArticle(article.getUrl(), new NewsRepository.NewsCallback() {
+            @Override
+            public void onSuccess(List<Article> articles) {
+                if (!isAdded()) return;
+                
+                showLoading(false);
+                showSuccess("Article removed from offline storage");
+                
+                // Refresh the bookmarks list to update UI
+                adapter.notifyDataSetChanged();
+            }
+            
+            @Override
+            public void onError(String message) {
+                if (!isAdded()) return;
+                
+                showLoading(false);
+                showError("Failed to remove offline article: " + message);
+            }
+        });
+    }
+    
+    private void updateSyncStatus(boolean fromCloud) {
+        syncStatusText.setText(fromCloud ? "Synced with cloud" : "Using local data");
+        syncStatusText.setVisibility(View.VISIBLE);
+        
+        // Hide sync status after a delay
+        syncStatusText.postDelayed(() -> {
+            if (isAdded()) {
+                syncStatusText.setVisibility(View.GONE);
+            }
+        }, 3000);
     }
     
     private void showLoading(boolean isLoading) {
-        if (isLoading) {
-            loadingIndicator.setVisibility(View.VISIBLE);
-            bookmarksRecyclerView.setVisibility(View.GONE);
-            emptyState.setVisibility(View.GONE);
-        } else {
-            loadingIndicator.setVisibility(View.GONE);
-            bookmarksRecyclerView.setVisibility(View.VISIBLE);
+        loadingIndicator.setVisibility(isLoading ? View.VISIBLE : View.GONE);
+        
+        // Disable user interaction during loading
+        if (bookmarksRecyclerView != null) {
+            bookmarksRecyclerView.setEnabled(!isLoading);
         }
     }
     
     private void showEmptyState(boolean isEmpty) {
-        if (isEmpty) {
-            emptyState.setVisibility(View.VISIBLE);
-            bookmarksRecyclerView.setVisibility(View.GONE);
-        } else {
-            emptyState.setVisibility(View.GONE);
-            bookmarksRecyclerView.setVisibility(View.VISIBLE);
-        }
+        emptyState.setVisibility(isEmpty ? View.VISIBLE : View.GONE);
+        bookmarksRecyclerView.setVisibility(isEmpty ? View.GONE : View.VISIBLE);
     }
     
     private void showError(String message) {
         if (getView() != null) {
-            Snackbar.make(getView(), message, Snackbar.LENGTH_SHORT).show();
+            Snackbar.make(getView(), message, Snackbar.LENGTH_LONG).show();
         }
     }
     
@@ -315,46 +355,33 @@ public class BookmarksFragment extends Fragment implements BookmarksAdapter.Book
     }
     
     private boolean isNetworkAvailable() {
-        ConnectivityManager connectivityManager = (ConnectivityManager) requireContext().getSystemService(Context.CONNECTIVITY_SERVICE);
-        if (connectivityManager != null) {
-            NetworkInfo activeNetworkInfo = connectivityManager.getActiveNetworkInfo();
-            return activeNetworkInfo != null && activeNetworkInfo.isConnected();
-        }
-        return false;
+        ConnectivityManager connectivityManager = (ConnectivityManager) 
+            requireContext().getSystemService(Context.CONNECTIVITY_SERVICE);
+        NetworkInfo activeNetworkInfo = connectivityManager.getActiveNetworkInfo();
+        return activeNetworkInfo != null && activeNetworkInfo.isConnected();
     }
     
     private void updateOfflineIndicator() {
         if (offlineIndicator != null) {
-            if (isOfflineMode) {
-                offlineIndicator.setVisibility(View.VISIBLE);
-                offlineIndicator.setText("Offline Mode");
-            } else {
-                offlineIndicator.setVisibility(View.GONE);
-            }
+            offlineIndicator.setVisibility(isOfflineMode ? View.VISIBLE : View.GONE);
+        }
+        
+        // If we've gone offline, show a message
+        if (isOfflineMode && getView() != null) {
+            Snackbar.make(getView(), "You're offline. Some features may be limited.", 
+                Snackbar.LENGTH_LONG).show();
         }
     }
     
-    /**
-     * BroadcastReceiver to listen for network connectivity changes
-     */
+    // Network change receiver to detect connectivity changes
     private class NetworkChangeReceiver extends BroadcastReceiver {
         @Override
         public void onReceive(Context context, Intent intent) {
-            if (intent.getAction() != null && 
-                intent.getAction().equals(ConnectivityManager.CONNECTIVITY_ACTION)) {
-                
-                boolean previousOfflineMode = isOfflineMode;
-                checkNetworkStatus();
-                
-                // If network state changed, update UI accordingly
-                if (previousOfflineMode != isOfflineMode) {
-                    if (isOfflineMode) {
-                        showError("You are offline. Using locally cached bookmarks.");
-                    } else {
-                        showSuccess("You are back online. Syncing bookmarks...");
-                        syncBookmarks();
-                    }
-                }
+            checkNetworkStatus();
+            
+            // If we're back online and had no bookmarks, try to load them again
+            if (!isOfflineMode && bookmarkedArticles.isEmpty()) {
+                loadBookmarkedArticles();
             }
         }
     }

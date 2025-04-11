@@ -1,8 +1,12 @@
 package com.example.newsapp.ui.article;
 
+import android.content.Context;
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuInflater;
@@ -24,26 +28,37 @@ import androidx.fragment.app.Fragment;
 import com.example.newsapp.R;
 import com.example.newsapp.data.models.Article;
 import com.example.newsapp.data.repository.BookmarkSyncRepository;
-import com.example.newsapp.utils.OfflineArticleManager;
+import com.example.newsapp.data.repository.NewsRepository;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 
+import java.util.List;
+
 public class ArticleDetailFragment extends Fragment {
+    private static final String TAG = "ArticleDetailFragment";
     private static final String ARG_URL = "url";
+    private static final String ARG_IS_OFFLINE = "is_offline";
+    
     private String articleUrl;
+    private boolean isOfflineAvailable = false;
     private BookmarkSyncRepository bookmarkSyncRepository;
-    private OfflineArticleManager offlineArticleManager;
+    private NewsRepository newsRepository;
     private boolean isBookmarked = false;
     private boolean isOfflineMode = false;
     private FloatingActionButton bookmarkFab;
     private ProgressBar progressBar;
     private WebView webView;
 
-    public static ArticleDetailFragment newInstance(String url) {
+    public static ArticleDetailFragment newInstance(String url, boolean isOfflineAvailable) {
         ArticleDetailFragment fragment = new ArticleDetailFragment();
         Bundle args = new Bundle();
         args.putString(ARG_URL, url);
+        args.putBoolean(ARG_IS_OFFLINE, isOfflineAvailable);
         fragment.setArguments(args);
         return fragment;
+    }
+    
+    public static ArticleDetailFragment newInstance(String url) {
+        return newInstance(url, false);
     }
     
     @Override
@@ -53,14 +68,19 @@ public class ArticleDetailFragment extends Fragment {
         
         if (getArguments() != null) {
             articleUrl = getArguments().getString(ARG_URL);
+            isOfflineAvailable = getArguments().getBoolean(ARG_IS_OFFLINE, false);
         }
         
         // Initialize repositories
         bookmarkSyncRepository = new BookmarkSyncRepository(requireContext());
-        offlineArticleManager = new OfflineArticleManager(requireContext());
+        newsRepository = new NewsRepository(requireContext());
         
         // Check network status
         isOfflineMode = !isNetworkAvailable();
+        
+        Log.d(TAG, "Article URL: " + articleUrl);
+        Log.d(TAG, "Is offline available: " + isOfflineAvailable);
+        Log.d(TAG, "Is offline mode: " + isOfflineMode);
     }
 
     @Override
@@ -97,40 +117,7 @@ public class ArticleDetailFragment extends Fragment {
         webView.getSettings().setDatabaseEnabled(true);
         
         // Set WebViewClient for handling page loading
-        webView.setWebViewClient(new WebViewClient() {
-            @Override
-            public void onPageFinished(WebView view, String url) {
-                super.onPageFinished(view, url);
-                progressBar.setVisibility(View.GONE);
-            }
-            
-            @Override
-            public boolean shouldOverrideUrlLoading(WebView view, String url) {
-                // If we're offline, check if this URL is available offline
-                if (isOfflineMode && !offlineArticleManager.isArticleAvailableOffline(url)) {
-                    showToastOnMainThread("This link is not available offline");
-                    return true;
-                }
-                
-                // Load URL in WebView
-                view.loadUrl(url);
-                return true;
-            }
-            
-            @Override
-            public void onReceivedError(WebView view, int errorCode, String description, String failingUrl) {
-                super.onReceivedError(view, errorCode, description, failingUrl);
-                
-                // Check if we have an offline version of this article
-                if (offlineArticleManager.isArticleAvailableOffline(failingUrl)) {
-                    String localUrl = offlineArticleManager.getLocalFileUrl(failingUrl);
-                    view.loadUrl(localUrl);
-                    showToastOnMainThread("Loading article from offline storage");
-                } else {
-                    showToastOnMainThread("Error loading article: " + description);
-                }
-            }
-        });
+        webView.setWebViewClient(newsRepository.getOfflineEnabledWebViewClient());
     }
     
     private void loadArticleContent() {
@@ -138,21 +125,35 @@ public class ArticleDetailFragment extends Fragment {
         
         progressBar.setVisibility(View.VISIBLE);
         
-        if (isOfflineMode) {
-            if (offlineArticleManager.isArticleAvailableOffline(articleUrl)) {
-                // Load the locally stored version
-                String localUrl = offlineArticleManager.getLocalFileUrl(articleUrl);
-                webView.loadUrl(localUrl);
-                showToastOnMainThread("Loading article from offline storage");
+        // First verify offline availability
+        newsRepository.isArticleAvailableOffline(articleUrl, isAvailable -> {
+            isOfflineAvailable = isAvailable;
+            
+            if (isOfflineMode) {
+                if (isOfflineAvailable) {
+                    // Load the locally stored version
+                    String localUrl = newsRepository.getOfflineArticleUrl(articleUrl);
+                    webView.loadUrl(localUrl);
+                    showToastOnMainThread("Loading article from offline storage");
+                } else {
+                    // No offline version available
+                    showOfflineNotAvailableMessage();
+                    progressBar.setVisibility(View.GONE);
+                }
             } else {
-                // No offline version available
-                showOfflineNotAvailableMessage();
-                progressBar.setVisibility(View.GONE);
+                // Check if we should load from offline storage anyway
+                if (isOfflineAvailable) {
+                    // Ask user if they want to use offline version
+                    String localUrl = newsRepository.getOfflineArticleUrl(articleUrl);
+                    // For simplicity, automatically use offline version if available
+                    webView.loadUrl(localUrl);
+                    showToastOnMainThread("Loading saved offline version");
+                } else {
+                    // Online mode, load directly from URL
+                    webView.loadUrl(articleUrl);
+                }
             }
-        } else {
-            // Online mode, load directly from URL
-            webView.loadUrl(articleUrl);
-        }
+        });
     }
     
     private void showOfflineNotAvailableMessage() {
@@ -172,6 +173,13 @@ public class ArticleDetailFragment extends Fragment {
         super.onResume();
         // Check if article is bookmarked
         checkBookmarkStatus();
+        
+        // Verify offline status
+        if (articleUrl != null) {
+            newsRepository.isArticleAvailableOffline(articleUrl, isAvailable -> {
+                isOfflineAvailable = isAvailable;
+            });
+        }
     }
     
     private void setupBookmarkFab() {
@@ -214,24 +222,29 @@ public class ArticleDetailFragment extends Fragment {
                 isBookmarked = true;
                 updateBookmarkFabIcon();
                 
-                // Now download article content for offline reading
-                if (!isOfflineMode) {
+                // Ask user if they want to download for offline reading
+                if (!isOfflineMode && !isOfflineAvailable) {
                     showToastOnMainThread("Saving article for offline reading...");
-                    offlineArticleManager.downloadArticleForOffline(article, success -> {
-                        if (success) {
-                            showToastOnMainThread("Article saved for offline reading");
-                        } else {
-                            showToastOnMainThread("Failed to save article for offline reading");
-                        }
-                    });
+                    downloadForOffline(article);
                 } else {
-                    showToastOnMainThread("Article bookmarked (offline mode)");
+                    showToastOnMainThread("Article bookmarked" + (isOfflineMode ? " (offline mode)" : ""));
                 }
             }
 
             @Override
             public void onError(String message) {
                 showToastOnMainThread("Failed to bookmark article: " + message);
+            }
+        });
+    }
+    
+    private void downloadForOffline(Article article) {
+        newsRepository.downloadArticleForOffline(article, success -> {
+            if (success) {
+                isOfflineAvailable = true;
+                showToastOnMainThread("Article saved for offline reading");
+            } else {
+                showToastOnMainThread("Failed to save article for offline reading");
             }
         });
     }
@@ -243,13 +256,10 @@ public class ArticleDetailFragment extends Fragment {
                 isBookmarked = false;
                 updateBookmarkFabIcon();
                 
-                // Also remove offline version
-                offlineArticleManager.deleteOfflineArticle(articleUrl);
-                
                 String message = syncedToCloud 
                     ? "Bookmark removed and synced" 
                     : "Bookmark removed (offline mode)";
-                    
+                
                 showToastOnMainThread(message);
             }
 
@@ -261,25 +271,68 @@ public class ArticleDetailFragment extends Fragment {
     }
     
     private boolean isNetworkAvailable() {
-        android.net.ConnectivityManager connectivityManager = (android.net.ConnectivityManager) 
-            requireContext().getSystemService(android.content.Context.CONNECTIVITY_SERVICE);
-        if (connectivityManager != null) {
-            android.net.NetworkInfo activeNetworkInfo = connectivityManager.getActiveNetworkInfo();
-            return activeNetworkInfo != null && activeNetworkInfo.isConnected();
-        }
-        return false;
+        ConnectivityManager connectivityManager = (ConnectivityManager) 
+            requireContext().getSystemService(Context.CONNECTIVITY_SERVICE);
+        NetworkInfo activeNetworkInfo = connectivityManager.getActiveNetworkInfo();
+        return activeNetworkInfo != null && activeNetworkInfo.isConnected();
     }
     
-    /**
-     * Helper method to show Toast messages safely on the main thread
-     */
     private void showToastOnMainThread(String message) {
-        if (getContext() == null) return;
-        
         new Handler(Looper.getMainLooper()).post(() -> {
-            if (isAdded() && getContext() != null) {
-                Toast.makeText(getContext(), message, Toast.LENGTH_SHORT).show();
+            if (isAdded()) {
+                Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT).show();
             }
         });
+    }
+    
+    @Override
+    public void onCreateOptionsMenu(@NonNull Menu menu, @NonNull MenuInflater inflater) {
+        inflater.inflate(R.menu.article_detail_menu, menu);
+        updateDownloadMenuItem(menu);
+        super.onCreateOptionsMenu(menu, inflater);
+    }
+    
+    private void updateDownloadMenuItem(Menu menu) {
+        MenuItem downloadItem = menu.findItem(R.id.action_download);
+        if (downloadItem != null) {
+            downloadItem.setVisible(!isOfflineMode && !isOfflineAvailable);
+        }
+        
+        MenuItem deleteItem = menu.findItem(R.id.action_delete_offline);
+        if (deleteItem != null) {
+            deleteItem.setVisible(isOfflineAvailable);
+        }
+    }
+    
+    @Override
+    public boolean onOptionsItemSelected(@NonNull MenuItem item) {
+        int id = item.getItemId();
+        
+        if (id == R.id.action_download) {
+            // Download for offline reading
+            Article article = new Article();
+            article.setUrl(articleUrl);
+            downloadForOffline(article);
+            return true;
+        } else if (id == R.id.action_delete_offline) {
+            // Delete offline version
+            newsRepository.deleteOfflineArticle(articleUrl, new NewsRepository.NewsCallback() {
+                @Override
+                public void onSuccess(List<Article> articles) {
+                    isOfflineAvailable = false;
+                    showToastOnMainThread("Article removed from offline storage");
+                    // Update menu items
+                    requireActivity().invalidateOptionsMenu();
+                }
+                
+                @Override
+                public void onError(String message) {
+                    showToastOnMainThread("Failed to remove offline article: " + message);
+                }
+            });
+            return true;
+        }
+        
+        return super.onOptionsItemSelected(item);
     }
 }
