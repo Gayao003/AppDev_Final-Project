@@ -28,13 +28,18 @@ import com.example.newsapp.data.repository.NewsRepository;
 import com.example.newsapp.ui.article.ArticleDetailFragment;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class BookmarksAdapter extends RecyclerView.Adapter<BookmarksAdapter.BookmarkViewHolder> {
     private static final String TAG = "BookmarksAdapter";
     private List<Article> articles;
     private final BookmarkActionListener actionListener;
     private final NewsRepository newsRepository;
+    
+    // A map to track which articles have a download in progress
+    private final Map<String, Boolean> downloadsInProgress = new HashMap<>();
     
     public interface BookmarkActionListener {
         void onRemoveBookmark(Article article);
@@ -61,6 +66,11 @@ public class BookmarksAdapter extends RecyclerView.Adapter<BookmarksAdapter.Book
         }
     }
     
+    public void updateDownloadStatus(String articleUrl, boolean completed) {
+        downloadsInProgress.put(articleUrl, !completed);
+        notifyDataSetChanged();
+    }
+    
     @NonNull
     @Override
     public BookmarkViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
@@ -85,8 +95,8 @@ public class BookmarksAdapter extends RecyclerView.Adapter<BookmarksAdapter.Book
         ImageView imageView;
         ImageButton removeButton;
         TextView offlineAvailableIndicator;
-        ImageButton downloadButton;
-        ImageButton deleteOfflineButton;
+        com.google.android.material.button.MaterialButton downloadButton;
+        com.google.android.material.button.MaterialButton deleteOfflineButton;
         ProgressBar downloadProgress;
         
         public BookmarkViewHolder(@NonNull View itemView) {
@@ -97,6 +107,7 @@ public class BookmarksAdapter extends RecyclerView.Adapter<BookmarksAdapter.Book
             offlineAvailableIndicator = itemView.findViewById(R.id.offline_available_indicator);
             downloadButton = itemView.findViewById(R.id.download_article_button);
             deleteOfflineButton = itemView.findViewById(R.id.delete_offline_button);
+            downloadProgress = itemView.findViewById(R.id.download_progress);
             
             // Add the remove bookmark button if it exists
             removeButton = itemView.findViewById(R.id.remove_bookmark_button);
@@ -117,6 +128,14 @@ public class BookmarksAdapter extends RecyclerView.Adapter<BookmarksAdapter.Book
             // Load image with proper error handling
             loadImage(article.getUrlToImage(), imageView);
             
+            // Reset download progress visibility
+            if (downloadProgress != null) {
+                // Check if this article has a download in progress
+                boolean isDownloading = downloadsInProgress.containsKey(article.getUrl()) && 
+                                        downloadsInProgress.get(article.getUrl());
+                downloadProgress.setVisibility(isDownloading ? View.VISIBLE : View.GONE);
+            }
+            
             // Check if article is available offline
             newsRepository.isArticleAvailableOffline(article.getUrl(), isAvailable -> {
                 if (offlineAvailableIndicator != null) {
@@ -131,12 +150,25 @@ public class BookmarksAdapter extends RecyclerView.Adapter<BookmarksAdapter.Book
                 if (deleteOfflineButton != null) {
                     deleteOfflineButton.setVisibility(isAvailable ? View.VISIBLE : View.GONE);
                 }
+                
+                // Also hide progress if article is available offline
+                if (downloadProgress != null && isAvailable) {
+                    downloadProgress.setVisibility(View.GONE);
+                    downloadsInProgress.remove(article.getUrl());
+                }
             });
             
             // Set up download button
             if (downloadButton != null) {
                 downloadButton.setOnClickListener(v -> {
                     if (actionListener != null) {
+                        // Show download progress and hide the button
+                        downloadProgress.setVisibility(View.VISIBLE);
+                        downloadButton.setVisibility(View.GONE);
+                        
+                        // Mark this article as downloading
+                        downloadsInProgress.put(article.getUrl(), true);
+                        
                         actionListener.onDownloadArticle(article);
                     }
                 });

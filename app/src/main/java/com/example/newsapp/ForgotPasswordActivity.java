@@ -1,10 +1,12 @@
 // app/src/main/java/com/example/newsapp/ForgotPasswordActivity.java
 package com.example.newsapp;
 
+import android.content.Intent;
 import android.os.Bundle;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageButton;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
@@ -31,16 +33,24 @@ public class ForgotPasswordActivity extends AppCompatActivity {
         etEmail = findViewById(R.id.etForgotPasswordEmail);
         btnResetPassword = findViewById(R.id.btnResetPassword);
         btnBack = findViewById(R.id.btnBack);
+        TextView tvBackToLogin = findViewById(R.id.tvBackToLogin);
 
-        // Get email from intent if available
-        String email = getIntent().getStringExtra("email");
-        if (email != null && !email.isEmpty()) {
-            etEmail.setText(email);
+        // Get intent extras if email was passed from login screen
+        String prefillEmail = getIntent().getStringExtra("email");
+        if (prefillEmail != null && !prefillEmail.isEmpty()) {
+            etEmail.setText(prefillEmail);
         }
 
         // Set click listeners
         btnResetPassword.setOnClickListener(v -> sendResetEmail());
-        btnBack.setOnClickListener(v -> finish());
+        btnBack.setOnClickListener(v -> onBackPressed());
+
+        // Add back to login listener
+        tvBackToLogin.setOnClickListener(v -> {
+            // Navigate back to login screen
+            startActivity(new Intent(ForgotPasswordActivity.this, LoginActivity.class));
+            finish();
+        });
     }
 
     private void sendResetEmail() {

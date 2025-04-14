@@ -235,19 +235,12 @@ private void setupOptions(View view) {
     // Find views
     LinearLayout myAccountOption = view.findViewById(R.id.option_my_account);
     LinearLayout accountLinkingOption = view.findViewById(R.id.option_account_linking);
-    LinearLayout pushNotificationsOption = view.findViewById(R.id.option_push_notifications);
     LinearLayout logoutOption = view.findViewById(R.id.option_logout);
     LinearLayout helpSupportOption = view.findViewById(R.id.option_help_support);
     LinearLayout aboutAppOption = view.findViewById(R.id.option_about_app);
 
     linkStatusText = view.findViewById(R.id.link_status_text);
     linkStatusIcon = view.findViewById(R.id.link_status_icon);
-
-    // Set up notifications switch if available
-    SwitchCompat notificationsSwitch = view.findViewById(R.id.switch_push_notifications);
-    if (notificationsSwitch != null) {
-        notificationsSwitch.setChecked(prefs.getBoolean("push_notifications_enabled", true));
-    }
 
     // Check if Google account is linked
     boolean isGoogleLinked = isGoogleAccountLinked();
@@ -271,18 +264,6 @@ private void setupOptions(View view) {
                 Toast.makeText(getActivity(), "Google account already linked", 
                         Toast.LENGTH_SHORT).show();
             }
-        });
-    }
-
-    // Push notifications option
-    if (pushNotificationsOption != null && notificationsSwitch != null) {
-        notificationsSwitch.setOnCheckedChangeListener((buttonView, isChecked) -> {
-            // Save the notification preference
-            prefs.edit().putBoolean("push_notifications_enabled", isChecked).apply();
-
-            Toast.makeText(getActivity(), 
-                    "Push notifications " + (isChecked ? "enabled" : "disabled"), 
-                    Toast.LENGTH_SHORT).show();
         });
     }
 

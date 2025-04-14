@@ -29,8 +29,9 @@ public class RegisterActivity extends AppCompatActivity {
     private EditText etName, etEmail, etPhone, etAge, etPassword, etConfirmPassword;
     private CheckBox cbTerms;
     private Button btnNext;
-    private ImageButton btnBack, btnTogglePassword, btnToggleConfirmPassword;
+    private ImageButton btnBack;
     private TextView tvLoginPrompt, tvStepIndicator;
+    private TextView tvTermsLink, tvPrivacyLink;
     
     private FirebaseAuth mAuth;
     private FirebaseFirestore db;
@@ -58,8 +59,8 @@ public class RegisterActivity extends AppCompatActivity {
         tvStepIndicator = findViewById(R.id.tvStepIndicator);
         etPassword = findViewById(R.id.etRegisterPassword);
         etConfirmPassword = findViewById(R.id.etRegisterConfirmPassword);
-        btnTogglePassword = findViewById(R.id.btnTogglePassword);
-        btnToggleConfirmPassword = findViewById(R.id.btnToggleConfirmPassword);
+        tvTermsLink = findViewById(R.id.tvTermsLink);
+        tvPrivacyLink = findViewById(R.id.tvPrivacyLink);
         
         tvStepIndicator.setText("Register");
         
@@ -79,9 +80,9 @@ public class RegisterActivity extends AppCompatActivity {
             finish();
         });
         
-        // Add toggle password visibility listeners
-        btnTogglePassword.setOnClickListener(v -> togglePasswordVisibility(etPassword, btnTogglePassword));
-        btnToggleConfirmPassword.setOnClickListener(v -> togglePasswordVisibility(etConfirmPassword, btnToggleConfirmPassword));
+        // Add Terms and Privacy Policy link listeners
+        tvTermsLink.setOnClickListener(v -> showTermsDialog());
+        tvPrivacyLink.setOnClickListener(v -> showPrivacyDialog());
     }
     
     private void validateAndProceed() {
@@ -283,17 +284,27 @@ public class RegisterActivity extends AppCompatActivity {
             });
     }
     
-    private void togglePasswordVisibility(EditText editText, ImageButton toggleButton) {
-        if (editText.getInputType() == (InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD)) {
-            // Show password
-            editText.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD);
-            toggleButton.setImageResource(R.drawable.ic_visibility);
-        } else {
-            // Hide password
-            editText.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
-            toggleButton.setImageResource(R.drawable.ic_visibility_off);
-        }
-        // Move cursor to end of text
-        editText.setSelection(editText.getText().length());
+    private void showTermsDialog() {
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setTitle("Terms of Service");
+        builder.setMessage("These Terms of Service govern your use of the application. By using our app, you agree to these terms.\n\n" +
+                "1. The app provides news content from various sources.\n" +
+                "2. We are not responsible for the accuracy of third-party content.\n" +
+                "3. We reserve the right to modify or discontinue the service at any time.\n" +
+                "4. Users are responsible for maintaining the confidentiality of their account information.");
+        builder.setPositiveButton("Close", null);
+        builder.show();
+    }
+    
+    private void showPrivacyDialog() {
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setTitle("Privacy Policy");
+        builder.setMessage("We collect minimal personal information needed to provide our services.\n\n" +
+                "1. Your email address is used for authentication.\n" +
+                "2. We do not sell your data to third parties.\n" +
+                "3. We use cookies and similar technologies to enhance your experience.\n" +
+                "4. We may collect usage statistics to improve our service.");
+        builder.setPositiveButton("Close", null);
+        builder.show();
     }
 }

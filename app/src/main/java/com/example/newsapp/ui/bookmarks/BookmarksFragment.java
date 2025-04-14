@@ -11,10 +11,9 @@ import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.LinearLayout;
-import android.widget.ProgressBar;
 import android.widget.TextView;
 
+import androidx.constraintlayout.widget.ConstraintLayout;
 import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -24,6 +23,8 @@ import com.example.newsapp.R;
 import com.example.newsapp.data.models.Article;
 import com.example.newsapp.data.repository.BookmarkSyncRepository;
 import com.example.newsapp.data.repository.NewsRepository;
+import com.google.android.material.chip.Chip;
+import com.google.android.material.progressindicator.LinearProgressIndicator;
 import com.google.android.material.snackbar.Snackbar;
 
 import java.util.ArrayList;
@@ -33,11 +34,11 @@ public class BookmarksFragment extends Fragment implements BookmarksAdapter.Book
     private static final String TAG = "BookmarksFragment";
     
     private RecyclerView bookmarksRecyclerView;
-    private ProgressBar loadingIndicator;
-    private LinearLayout emptyState;
+    private LinearProgressIndicator loadingIndicator;
+    private ConstraintLayout emptyState;
     private SwipeRefreshLayout swipeRefreshLayout;
     private TextView syncStatusText;
-    private TextView offlineIndicator;
+    private Chip offlineIndicator;
     private boolean isOfflineMode = false;
     
     private BookmarksAdapter adapter;
@@ -142,15 +143,7 @@ public class BookmarksFragment extends Fragment implements BookmarksAdapter.Book
                     // Update sync status
                     updateSyncStatus(fromCloud);
                 } else {
-                    // Show empty state with appropriate message
-                    TextView emptyStateText = emptyState.findViewById(R.id.empty_state_text);
-                    if (emptyStateText != null) {
-                        if (isOfflineMode) {
-                            emptyStateText.setText("No bookmarks available offline. Connect to the internet to sync your bookmarks.");
-                        } else {
-                            emptyStateText.setText("You haven't bookmarked any articles yet.");
-                        }
-                    }
+                    // Show empty state
                     showEmptyState(true);
                 }
             }
@@ -164,11 +157,6 @@ public class BookmarksFragment extends Fragment implements BookmarksAdapter.Book
                 
                 // Only show empty state if we have no articles
                 if (bookmarkedArticles.isEmpty()) {
-                    // Update empty state message for offline mode
-                    TextView emptyStateText = emptyState.findViewById(R.id.empty_state_text);
-                    if (emptyStateText != null && isOfflineMode) {
-                        emptyStateText.setText("Unable to load bookmarks in offline mode. Connect to the internet to sync your bookmarks.");
-                    }
                     showEmptyState(true);
                 }
                 
@@ -268,12 +256,11 @@ public class BookmarksFragment extends Fragment implements BookmarksAdapter.Book
     
     @Override
     public void onDownloadArticle(Article article) {
-        showLoading(true);
-        
         newsRepository.downloadArticleForOffline(article, success -> {
             if (!isAdded()) return;
             
-            showLoading(false);
+            // Update download status in adapter
+            adapter.updateDownloadStatus(article.getUrl(), true);
             
             if (success) {
                 showSuccess("Article downloaded for offline reading");
@@ -325,33 +312,53 @@ public class BookmarksFragment extends Fragment implements BookmarksAdapter.Book
     
     private void showLoading(boolean isLoading) {
         loadingIndicator.setVisibility(isLoading ? View.VISIBLE : View.GONE);
-        
-        // Disable user interaction during loading
-        if (bookmarksRecyclerView != null) {
-            bookmarksRecyclerView.setEnabled(!isLoading);
-        }
     }
     
     private void showEmptyState(boolean isEmpty) {
         emptyState.setVisibility(isEmpty ? View.VISIBLE : View.GONE);
         bookmarksRecyclerView.setVisibility(isEmpty ? View.GONE : View.VISIBLE);
+        
+        // Update the empty state message based on network status
+        if (isEmpty) {
+            TextView emptyStateTitle = emptyState.findViewById(R.id.empty_state_title);
+            TextView emptyStateText = emptyState.findViewById(R.id.empty_state_text);
+            
+            if (isOfflineMode) {
+                emptyStateTitle.setText("No offline bookmarks");
+                emptyStateText.setText("Connect to the internet to sync your bookmarks or save articles for offline reading.");
+            } else {
+                emptyStateTitle.setText("No bookmarks yet");
+                emptyStateText.setText("Save your favorite articles to read them later.");
+            }
+        }
     }
     
     private void showError(String message) {
         if (getView() != null) {
-            Snackbar.make(getView(), message, Snackbar.LENGTH_LONG).show();
+            Snackbar snackbar = Snackbar.make(getView(), message, Snackbar.LENGTH_LONG);
+            View snackbarView = snackbar.getView();
+            snackbarView.setBackgroundResource(R.color.warning_color);
+            snackbar.show();
         }
     }
     
     private void showSuccess(String message) {
         if (getView() != null) {
-            Snackbar.make(getView(), message, Snackbar.LENGTH_SHORT).show();
+            Snackbar snackbar = Snackbar.make(getView(), message, Snackbar.LENGTH_SHORT);
+            View snackbarView = snackbar.getView();
+            snackbarView.setBackgroundResource(R.color.green);
+            snackbar.show();
         }
     }
     
     private void checkNetworkStatus() {
         isOfflineMode = !isNetworkAvailable();
         updateOfflineIndicator();
+        
+        // Update empty state if needed
+        if (bookmarkedArticles.isEmpty()) {
+            showEmptyState(true);
+        }
     }
     
     private boolean isNetworkAvailable() {
@@ -368,8 +375,11 @@ public class BookmarksFragment extends Fragment implements BookmarksAdapter.Book
         
         // If we've gone offline, show a message
         if (isOfflineMode && getView() != null) {
-            Snackbar.make(getView(), "You're offline. Some features may be limited.", 
-                Snackbar.LENGTH_LONG).show();
+            Snackbar snackbar = Snackbar.make(getView(), "You're offline. Some features may be limited.", 
+                Snackbar.LENGTH_LONG);
+            View snackbarView = snackbar.getView();
+            snackbarView.setBackgroundResource(R.color.warning_color);
+            snackbar.show();
         }
     }
     

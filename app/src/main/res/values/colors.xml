@@ -10,6 +10,7 @@
     <color name="icon_color">#6C63FF</color>
     <color name="text_primary">#333333</color>
     <color name="text_secondary">#8A8A8A</color>
+    <color name="text_hint">#BDBDBD</color>
     <color name="divider_color">#E0E0E0</color>
     <color name="warning_color">#F44336</color>
     <color name="green">#4CAF50</color>

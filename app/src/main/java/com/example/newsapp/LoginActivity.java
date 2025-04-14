@@ -39,7 +39,7 @@ public class LoginActivity extends AppCompatActivity {
     private EditText etEmail, etPassword;
     private Button btnLogin, btnGoogleSignIn;
     private TextView tvRegisterPrompt, tvForgotPassword, tvSignUp;
-    private ImageButton btnBack, btnTogglePassword;
+    private ImageButton btnBack;
     
     private FirebaseAuth mAuth;
     private FirebaseFirestore db;
@@ -81,7 +81,6 @@ public class LoginActivity extends AppCompatActivity {
         tvRegisterPrompt = findViewById(R.id.tvRegisterPrompt);
         tvForgotPassword = findViewById(R.id.tvForgotPassword);
         btnBack = findViewById(R.id.btnBack);
-        btnTogglePassword = findViewById(R.id.btnTogglePassword);
         tvSignUp = findViewById(R.id.tvSignUp);
     }
     
@@ -411,21 +410,6 @@ public class LoginActivity extends AppCompatActivity {
         btnBack.setOnClickListener(v -> {
             // Handle back button - usually just finish()
             finish();
-        });
-
-        btnTogglePassword.setOnClickListener(v -> {
-            // Toggle password visibility
-            if (etPassword.getInputType() == (InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD)) {
-                // Show password
-                etPassword.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD);
-                btnTogglePassword.setImageResource(R.drawable.ic_visibility);
-            } else {
-                // Hide password
-                etPassword.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
-                btnTogglePassword.setImageResource(R.drawable.ic_visibility_off);
-            }
-            // Move cursor to end of text
-            etPassword.setSelection(etPassword.getText().length());
         });
 
         tvSignUp.setOnClickListener(v -> {
