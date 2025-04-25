@@ -3,6 +3,12 @@
     xmlns:app="http://schemas.android.com/apk/res-auto">
     
     <item
+        android:id="@+id/action_bookmark"
+        android:icon="@drawable/ic_bookmark_border"
+        android:title="Bookmark Article"
+        app:showAsAction="ifRoom" />
+    
+    <item
         android:id="@+id/action_download"
         android:icon="@drawable/ic_download"
         android:title="Download for Offline"

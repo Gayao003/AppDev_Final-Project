@@ -44,7 +44,6 @@ public class ArticleDetailFragment extends Fragment {
     private NewsRepository newsRepository;
     private boolean isBookmarked = false;
     private boolean isOfflineMode = false;
-    private FloatingActionButton bookmarkFab;
     private ProgressBar progressBar;
     private WebView webView;
 
@@ -88,16 +87,12 @@ public class ArticleDetailFragment extends Fragment {
         View view = inflater.inflate(R.layout.fragment_article_detail, container, false);
         webView = view.findViewById(R.id.web_view);
         progressBar = view.findViewById(R.id.progress_bar);
-        bookmarkFab = view.findViewById(R.id.bookmark_fab);
         
         // Configure WebView
         setupWebView();
         
         // Load content based on network status
         loadArticleContent();
-        
-        // Set up bookmark FAB
-        setupBookmarkFab();
         
         return view;
     }
@@ -182,31 +177,12 @@ public class ArticleDetailFragment extends Fragment {
         }
     }
     
-    private void setupBookmarkFab() {
-        bookmarkFab.setOnClickListener(v -> {
-            if (isBookmarked) {
-                unbookmarkArticle();
-            } else {
-                bookmarkArticle();
-            }
-        });
-    }
-    
     private void checkBookmarkStatus() {
         if (articleUrl == null) return;
         
         bookmarkSyncRepository.isArticleBookmarked(articleUrl, bookmarked -> {
             isBookmarked = bookmarked;
-            updateBookmarkFabIcon();
         });
-    }
-    
-    private void updateBookmarkFabIcon() {
-        if (isBookmarked) {
-            bookmarkFab.setImageResource(R.drawable.ic_bookmark_filled);
-        } else {
-            bookmarkFab.setImageResource(R.drawable.ic_bookmark_border);
-        }
     }
     
     private void bookmarkArticle() {
@@ -220,7 +196,8 @@ public class ArticleDetailFragment extends Fragment {
             @Override
             public void onSuccess(boolean syncedToCloud) {
                 isBookmarked = true;
-                updateBookmarkFabIcon();
+                // Refresh the menu to show bookmark status change
+                requireActivity().invalidateOptionsMenu();
                 
                 // Ask user if they want to download for offline reading
                 if (!isOfflineMode && !isOfflineAvailable) {
@@ -254,7 +231,8 @@ public class ArticleDetailFragment extends Fragment {
             @Override
             public void onSuccess(boolean syncedToCloud) {
                 isBookmarked = false;
-                updateBookmarkFabIcon();
+                // Refresh the menu to show bookmark status change
+                requireActivity().invalidateOptionsMenu();
                 
                 String message = syncedToCloud 
                     ? "Bookmark removed and synced" 
@@ -289,6 +267,7 @@ public class ArticleDetailFragment extends Fragment {
     public void onCreateOptionsMenu(@NonNull Menu menu, @NonNull MenuInflater inflater) {
         inflater.inflate(R.menu.article_detail_menu, menu);
         updateDownloadMenuItem(menu);
+        updateBookmarkMenuItem(menu);
         super.onCreateOptionsMenu(menu, inflater);
     }
     
@@ -301,6 +280,17 @@ public class ArticleDetailFragment extends Fragment {
         MenuItem deleteItem = menu.findItem(R.id.action_delete_offline);
         if (deleteItem != null) {
             deleteItem.setVisible(isOfflineAvailable);
+        }
+    }
+    
+    private void updateBookmarkMenuItem(Menu menu) {
+        MenuItem bookmarkItem = menu.findItem(R.id.action_bookmark);
+        if (bookmarkItem != null) {
+            // Update icon based on bookmark status
+            bookmarkItem.setIcon(isBookmarked ? 
+                R.drawable.ic_bookmark_filled : 
+                R.drawable.ic_bookmark_border);
+            bookmarkItem.setTitle(isBookmarked ? "Remove Bookmark" : "Bookmark Article");
         }
     }
     
@@ -331,8 +321,31 @@ public class ArticleDetailFragment extends Fragment {
                 }
             });
             return true;
+        } else if (id == R.id.action_bookmark) {
+            // Toggle bookmark status
+            if (isBookmarked) {
+                unbookmarkArticle();
+            } else {
+                bookmarkArticle();
+            }
+            // Update menu after toggle
+            requireActivity().invalidateOptionsMenu();
+            return true;
+        } else if (id == R.id.action_share) {
+            // Share article URL
+            shareArticleUrl();
+            return true;
         }
         
         return super.onOptionsItemSelected(item);
+    }
+    
+    private void shareArticleUrl() {
+        if (articleUrl == null) return;
+        
+        android.content.Intent shareIntent = new android.content.Intent(android.content.Intent.ACTION_SEND);
+        shareIntent.setType("text/plain");
+        shareIntent.putExtra(android.content.Intent.EXTRA_TEXT, articleUrl);
+        startActivity(android.content.Intent.createChooser(shareIntent, "Share article via"));
     }
 }
