@@ -18,4 +18,6 @@
     <!-- Chip colors -->
     <color name="chip_background">#E0F2F1</color>
     <color name="chip_text">#006064</color>
+    <!-- Launcher icon background -->
+    <color name="launcher_background">#FFFFFF</color>
 </resources>
